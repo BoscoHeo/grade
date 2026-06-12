@@ -10,6 +10,27 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Security headers middleware
+app.use((req, res, next) => {
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "same-origin");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com; frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com https://*.gcp.cx;"
+  );
+  
+  // Set X-Frame-Options to SAMEORIGIN, but verify if we are in development inside AI Studio to prevent bounding boxes block
+  if (process.env.NODE_ENV !== "production") {
+    // In dev, let are frame ancestors do the work and don't send X-Frame-Options since older frame rules can block preview
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  } else {
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  }
+  
+  next();
+});
+
 // Enable JSON parsing for api endpoints with limits for base64 image uploads
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
