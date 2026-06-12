@@ -1,0 +1,8 @@
+{
+  "name": "생활기록부 창의적 체험활동 평어 자동 생성기",
+  "description": "수행평가 결과 표 및 성적 일람표 정보를 바탕으로 학교생활기록부 교과학습 발달상황 피드백을 맞춤형으로 자동 생성해 주는 선생님 전용 인공지능 보조 도구입니다. 이름 자동 마스킹 및 다양한 어조 설정을 지원합니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
