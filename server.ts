@@ -8,6 +8,7 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 dotenv.config();
 
 const app = express();
+app.disable("x-powered-by");
 const PORT = 3000;
 
 // Security headers middleware
