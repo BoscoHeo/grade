@@ -655,8 +655,8 @@ app.post("/api/generate-creative-recommendations", async (req, res) => {
     const provider = (req.headers["x-api-provider"] as string) || "gemini";
     const selectedModel = (req.headers["x-selected-model"] as string) || "gemini-3.1-flash-lite";
 
-    let tempValue = 0.75;
-    if (creativityLevel === "low") tempValue = 0.25;
+    let tempValue = 0.78;
+    if (creativityLevel === "low") tempValue = 0.45;
     if (creativityLevel === "high") tempValue = 0.98;
 
     const toneInstructionMap = {
@@ -684,7 +684,10 @@ app.post("/api/generate-creative-recommendations", async (req, res) => {
        '~에 귀감이 됨', '타의 모범이 됨', '숭고한 정신', '훌륭한 성품', '존경을 받음', '모범적이고' 처럼 지나치게 인위적이고 과장되었거나 비일상적이며 구태의연한 기재 상투어는 **절대 지양**하십시오. 대신, 구체적으로 어떤 활동을 성실히 수행했는지, 동료와 어떻게 소통하며 배려했는지 등의 **사실에 기반한 다정하면서도 세련되고 담백한 교실 관찰문**(예: ~에 주도적으로 임함, ~에 기여함, ~에서 성실히 역할을 발휘함, ~하며 배려와 협력을 실현함 등)으로 작성하십시오.
     5. 어조 지침: ${toneInstructionMap[tone as keyof typeof toneInstructionMap] || toneInstructionMap.noun}
     6. 길이 요건: ${limitWord}. 각 추천 문장들의 최종 도출 길이는 반드시 이 수치 요건을 철저히 준수하십시오.
-    7. 문장 다양성 극대화: 각 관찰 요소별로 생성된 10개의 예시들은 첫 시작 어휘와 부사, 서사 구조가 단 한 줄도 유사하지 않도록 전면 다채롭게 격별하여 작성하십시오.
+    7. ★★★ [초특급 중요] 10개 추천 문장의 복사 및 중복/유사 생성 절대 금지:
+       하나의 관찰 요소에 대응해 생성되는 10개의 문장은 **첫 어미, 도입 부사, 중간의 서사 구조, 어조 뉘앙스가 완전히 독립적인 10개 고유의 다채로운 독창 문장**이어야 합니다.
+       단 한 개라도 동일한 문장이나 어휘 몇 가지만 바꾼 복사판 문장(자가 복제)이 포함될 시 심각한 오류로 간주됩니다.
+       서로 다 다른 상황(역할 책임, 참여 자세, 동료 소통, 성찰 태도)에 입각하여 각기 개성 있는 문맥으로 창조하여 1번부터 10번까지의 다양성을 극대화하십시오.
 
     8. ★6★ [기재 품질 & 느낌 극대화 예시 지침 (Few-Shot)]
        반드시 다음의 실제 학교 현장 우수 평어 작성 느낌과 문장 스타일에 입각하여 추천 문장들을 생성해 주십시오:
@@ -760,13 +763,13 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
                     element: { type: Type.STRING, description: "기준 역할을 한 관찰 요소명" },
                     items: {
                       type: Type.ARRAY,
-                      description: "해당 요소 관련 10개 완성 문장",
+                      description: "해당 요소에 대한 10개의 완전히 다른, 중복되지 않는 다채로운 추천 문장 목록",
                       items: {
                         type: Type.OBJECT,
                         required: ["id", "recommendedText"],
                         properties: {
                           id: { type: Type.NUMBER, description: "그룹별 1~10 일련번호" },
-                          recommendedText: { type: Type.STRING, description: "이름 생략, 따옴표 자제 지표가 이행된 추천 기재 구절" }
+                          recommendedText: { type: Type.STRING, description: "이름 생략, 따옴표 자제 수칙이 완료되었으며 서로의 어휘와 구조와 상황 묘사가 고유한 완성 기재 문장 (1번부터 10번까지의 추천 텍스트 모두가 전혀 동일하지 않고 다채로운 고유 서사를 담아야 함)" }
                         }
                       }
                     }
