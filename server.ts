@@ -88,6 +88,83 @@ function formatServerErrorMessage(error: any): string {
 }
 
 /**
+ * 전역 헬퍼: 생활기록부 기재 규정에 맞추어 생성물 문장 정제 및 후처리 보정
+ * - 어미는 반드시 "~함." 또는 "~임."으로 마침표 포함하여 끝나도록 강제함.
+ * - "~할 수 있음", "~수 있음" 기재는 절대 금기이므로 "~함."으로 일괄 교정함.
+ * - 영문 및 수학적 특수문자 (+, -, *, x, X, /)는 "덧셈", "뺄셈", "곱셈", "나눗셈" 등의 한글 명칭으로 치환함.
+ * - 실용 규격 단위 (cm, kg, g, kg, L, ml, mm 등)는 영문 기재를 보존해줌.
+ */
+function sanitizeRecordText(text: string, studentName?: string): string {
+  if (!text) return "";
+  let cleaned = text.trim();
+
+  // 1. 불필요한 따옴표 전체 제거
+  cleaned = cleaned.replace(/["”]/g, "");
+
+  // 2. 주어 시작 생략 지원
+  const prefixRegex = /^(이\s*학생은|이\s*아동은|본\s*아동은|본\s*학생은|상기\s*학생은|상기\s*아동은|해당\s*학생은|해당\s*아동은|이\s*학습자는|학습자는|이\s*학생|이\s*아동|본\s*아동|본\s*학생|그는|그녀는|상기\s*학생|이\s*학생의|이\s*아동의)\s*/;
+  cleaned = cleaned.replace(prefixRegex, "");
+
+  if (studentName) {
+    const escapedName = studentName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    const namePrefixRegex = new RegExp(`^(${escapedName}\\s*학생은|${escapedName}\\s*아동은|${escapedName}은|${escapedName}는|${escapedName}이)\\s*`);
+    cleaned = cleaned.replace(namePrefixRegex, "");
+  }
+
+  // 3. 수학 연산 및 특수문자 한글화 치환 (단, 단위 cm, kg, g, L, ml 등은 보존하고 일반 수학 부호만 치환)
+  cleaned = cleaned
+    .replace(/\+/g, " 덧셈 ")
+    .replace(/(?<!\w)-(?!\w|\d)/g, " 뺄셈 ") // 혼자 있는 붙임표나 마이너스 부호 대응
+    .replace(/\s*[xX*]\s*/g, " 곱셈 ")
+    .replace(/\s*\/\s*/g, " 나눗셈 ")
+    .replace(/\s*=\s*/g, " 등호 ");
+
+  // 4. 금기 표현인 '할 수 있음' 또는 '수 있음' 교체
+  // '~할 수 있음.' -> '~함.', '~수 있음.' -> '~함.'
+  cleaned = cleaned
+    .replace(/(?:할\s*수|수\s*)\s*있음\./g, "함.")
+    .replace(/(?:할\s*수|수\s*)\s*있음(?=\s|$)/g, "함")
+    .replace(/있음\./g, "함.")
+    .replace(/있음(?=\s|$)/g, "함");
+
+  // '~다.' 또는 '~습니다.' 등의 문어체나 존댓말이 오발주되었을 때 수정
+  cleaned = cleaned
+    .replace(/합니다\./g, "함.")
+    .replace(/임니다\./g, "임.")
+    .replace(/입니다\./g, "임.")
+    .replace(/보입니다\./g, "보임.")
+    .replace(/다\./g, "함.");
+
+  // 5. 어미가 "~함." 또는 "~임."으로만 끝나는지 최종 점검하여 마침표 및 어미 보정
+  if (cleaned.length > 0 && !cleaned.endsWith(".")) {
+    cleaned += ".";
+  }
+
+  // 마침표가 온전히 박혀 있는 상태에서 어미를 강하게 보정
+  if (cleaned.endsWith(".")) {
+    const stem = cleaned.slice(0, -1).trim();
+    if (stem.length > 0) {
+      const lastChar = stem.slice(-1);
+      // 개조식 종결어미 'ㅁ' 받침(함, 임, 됨, 음 등) 검사
+      if (!/[함임됨음만뿐품셈]/.test(lastChar)) {
+        if (lastChar === "다" || lastChar === "요" || lastChar === "오") {
+          const base = stem.slice(0, -1);
+          if (base.endsWith("한") || base.endsWith("편")) {
+            cleaned = base.slice(0, -1) + "함.";
+          } else if (base.endsWith("였") || base.endsWith("했") || base.endsWith("았") || base.endsWith("었")) {
+            cleaned = base + "음.";
+          } else {
+            cleaned = stem.slice(0, -1) + "함.";
+          }
+        }
+      }
+    }
+  }
+
+  return cleaned.trim();
+}
+
+/**
  * Call Gemini with automatic retry on temporary errors (503, 429, UNAVAILABLE)
  * using exponential backoff, and fallback to alternative models if the primary model is overloaded.
  */
@@ -435,24 +512,6 @@ app.post("/api/generate-records", async (req, res) => {
       additionalInstructions,
     } = config;
 
-    // Helper to sanitize any accidental pronoun or student name prefixes from generated record texts
-    const sanitizeRecordText = (text: string, studentName?: string): string => {
-      if (!text) return "";
-      let cleaned = text.trim();
-
-      // Strips structural pronouns/indicators at the start of sentences
-      const prefixRegex = /^(이\s*학생은|이\s*아동은|본\s*아동은|본\s*학생은|상기\s*학생은|상기\s*아동은|해당\s*학생은|해당\s*아동은|이\s*학습자는|학습자는|이\s*학생|이\s*아동|본\s*아동|본\s*학생|그는|그녀는|상기\s*학생)\s*/;
-      cleaned = cleaned.replace(prefixRegex, "");
-
-      if (studentName) {
-        const escapedName = studentName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
-        const namePrefixRegex = new RegExp(`^(${escapedName}\\s*학생은|${escapedName}\\s*아동은|${escapedName}은|${escapedName}는|${escapedName}이)\\s*`);
-        cleaned = cleaned.replace(namePrefixRegex, "");
-      }
-
-      return cleaned.trim();
-    };
-
     // Map creativity/freedom level directly to Gemini model temperature parameter
     let tempValue = 0.65;
     if (creativityLevel === "low") {
@@ -462,9 +521,9 @@ app.post("/api/generate-records", async (req, res) => {
     }
 
     const toneInstructionMap = {
-      noun: "문장은 반드시 개조식 종결어미인 명사형 종결(~함. ~임. ~보임. ~추천함)로 단호하고 객관성있게 끝나야 합니다. (~다.로 절대 끝나지 않음)",
-      respect: "문장은 서술형 평어체이자 경어체(~합니다. ~있습니다. ~보입니다)로 격조 있고 친절하고 자연스러운 문장으로 서술되어야 합니다.",
-      special: "문장은 행동의 우수함이나 태도를 더욱 드높이는 종결어미인 '~함이 돋보임', '~하는 면모를 보임', '~가 탁월함' 등으로 작성하여 학생의 돋보이는 능력을 강조하세요.",
+      noun: "★초특급 지침★ 모든 문장은 반드시 명사형 종결어미인 '~함.' 또는 '~임.'(마침표 포함)으로만 종료되어야 합니다. '~다.'나 '~함'(마침표 누락)은 절대 금지되며, 특히 '~할 수 있음', '~수 있음' 등의 표기는 기록 규정 금기 사항이므로 절대 노출해서는 안 됩니다.",
+      respect: "★초특급 지침★ 모든 문장은 예외 없이 반드시 개조식 명사형 종결어미인 '~함.' 또는 '~임.'(마침표 포함)으로만 깔끔하게 종료되어야 합니다. (~합니다. ~수 있음. ~할 수 있음. 은 전면 금지 사항입니다.)",
+      special: "★초특급 지침★ 문장 종결 표현은 반드시 '~함이 돋보임.', '~하는 모습을 보임.', '~에 기여함.'과 같이 최종 머리부터 끝매듭까지 반드시 '~함.', '~임.'(마침표 포함) 형태로 완결되어야 합니다. '~할 수 있음.', '~수 있음.' 등은 사용할 수 없습니다.",
     };
 
     const focusInstructions: string[] = [];
@@ -472,6 +531,9 @@ app.post("/api/generate-records", async (req, res) => {
     focusInstructions.push("- ★★★ 극도로 중요 지침 (평가 요소 엄수): 기재된 평가 요소(evaluationElement) 및 성취기준 내용에 등장하지 않는 완전히 인조적이거나 상상해낸 행동 사실, 구체적 사건 일화, 사적인 성격 묘사 등 '근거에 없는 뜬금없는 과외 사실/사적 활동'은 절대로 지어내서 적지 마십시오. 오직 전달된 평가 요소와 학생이 가진 등급 수준(매우 잘함, 잘함, 보통, 노력요함) 에 입각하여 단정하고 투명한 사실 위주로만 핵심을 축약 서술하여 가공하여야 합니다.");
     // [요구사항 반영] 교과학습 발달상황에 있는 평가요소는 자료를 올릴 경우 그 내용을 그대로 반영해줘
     focusInstructions.push("- ★★★ 극도로 중요 지침 (평가 요소 원안 준수 및 미변형): 사용자가 올린 성적 자료나 직접 입력하여 등록한 각 과목 평가 요인의 '평가 요소(evaluationElement)' 핵심 문장 및 키워드(예: '글을 바르게 고쳐 쓰기', '문형 구조 파악하기' 등)는 기재 평어를 생성할 때 함부로 바꾸거나 다듬지 말아야 하며, **그 평가 요소를 있는 그대로 문장에 온전히 삽입하고 노출시켜 반영**하여야 합니다. 평가 요소 전체를 왜곡하거나 소실시키지 말고 원형을 존중하여 최종 피드백 문구를 생성하십시오.");
+    // [요구사항 반영] 영문 및 특수문자 금지, 단위 제외, 할 수 있음 금지
+    focusInstructions.push("- ★★★ 영문 및 수학적/연산 특수부호 기재 전면 금지: 문장 내에 어떠한 연산 기호나 수학 관련 부호(+, -, x, X, *, / 등)를 절대 그냥 적지 마십시오. 예컨대 '+', '-', 'x'는 기하급수적으로 감점되는 금기 부호이므로 무조건 '덧셈과 뺄셈', '곱셈', '나눗셈' 등 친절한 순수 한글 용어로 풀어서 작성해야 합니다.");
+    focusInstructions.push("- ★★★ 단위 기호 영문 기재 보존: 단, 센티미터(cm), 킬로그램(kg), 그램(g), 미터(m), 리터(L), 밀리리터(ml), 밀리미터(mm)와 같은 실용 수치 단위는 예외적으로 영문 기호 그대로(예: cm, kg, g...) 노출 기재할 수 있으며 권장됩니다.");
 
     if (focusAreas.growthOriented) {
       focusInstructions.push("- '노력요함'이나 빈칸이라 하더라도 부정적인 평가 대신, 향후 '성장할 수 있는 잠재력이나 격려, 구체적인 지도 조언' 방향으로 성장 지향적으로 표현해주세요.");
@@ -660,9 +722,9 @@ app.post("/api/generate-creative-recommendations", async (req, res) => {
     if (creativityLevel === "high") tempValue = 0.98;
 
     const toneInstructionMap = {
-      noun: "문장은 반드시 개조식 종결어미인 명사형 종결 (~함. ~임. ~보임. ~추천함) 로 완성하여 신뢰를 가중하십시오.",
-      respect: "문장은 서술형 평어체이자 경어체 (~합니다. ~있습니다. ~보입니다) 로 격조 있고 친절하게 완성하십시오.",
-      special: "문장은 행동의 우수성이나 태도를 더욱 칭송하는 종결어미 (~함이 돋보임, ~하는 면모를 보임, ~가 탁월함) 로 강조하십시오."
+      noun: "★초특급 지침★ 모든 문장은 반드시 개조식 종결어미인 '~함.' 또는 '~임.'(마침표 포함)으로만 종료되어야 합니다. '~다.'나 '~함'(마침표 누락)은 절대 금지되며, 특히 '~할 수 있음', '~수 있음' 등의 가능 형태 표현은 통지표 기록 규정 금기 사항이므로 절대로 사용해서는 안 됩니다.",
+      respect: "★초특급 지침★ 본 플랫폼 통지표 규정상 존댓말 서술 대신 반드시 개조식 명사형 종결어미인 '~함.' 또는 '~임.'(마침표 포함)으로만 깔끔하게 종료되어야 합니다. (~합니다, ~수 있음, ~할 수 있음은 전면 금지)",
+      special: "★초특급 지침★ 문장 끝맺음은 반드시 '~함이 돋보임.', '~하는 모습을 보임.', '~에 기여함.'과 같이 최종 어미가 '~함.', '~임.'(마침표 포함) 형태로 완결되어야 합니다. '~할 수 있음.', '~수 있음.' 등은 절대 금지됩니다."
     };
 
     const limitWord = `공백 포함 최대 ${maxLength || 1000}자 이내(절대 초과하지 않을 것)`;
@@ -683,13 +745,15 @@ app.post("/api/generate-creative-recommendations", async (req, res) => {
     4. ★7★ 일상적이지 않은 문어체 극찬/상투어 절대 배제 지침:
        '~에 귀감이 됨', '타의 모범이 됨', '숭고한 정신', '훌륭한 성품', '존경을 받음', '모범적이고' 처럼 지나치게 인위적이고 과장되었거나 비일상적이며 구태의연한 기재 상투어는 **절대 지양**하십시오. 대신, 구체적으로 어떤 활동을 성실히 수행했는지, 동료와 어떻게 소통하며 배려했는지 등의 **사실에 기반한 다정하면서도 세련되고 담백한 교실 관찰문**(예: ~에 주도적으로 임함, ~에 기여함, ~에서 성실히 역할을 발휘함, ~하며 배려와 협력을 실현함 등)으로 작성하십시오.
     5. 어조 지침: ${toneInstructionMap[tone as keyof typeof toneInstructionMap] || toneInstructionMap.noun}
-    6. 길이 요건: ${limitWord}. 각 추천 문장들의 최종 도출 길이는 반드시 이 수치 요건을 철저히 준수하십시오.
-    7. ★★★ [초특급 중요] 10개 추천 문장의 복사 및 중복/유사 생성 절대 금지:
+    6. ★Link★ 영문 및 수학적/연산 특수부호 기재 전면 금지: 문장 내에 어떠한 연산 기호나 사칙 부호(+, -, x, X, *, / 등)를 절대 그대로 적지 마십시오. 예컨대 '+', '-', 'x'는 기하급수적으로 감점되는 기재 금기 부호이므로 무조건 '덧셈과 뺄셈', '곱셈', '나눗셈' 등 친절한 순수 한글 용어로 풀어서 작성해야 합니다.
+    7. ★Link★ 단위 기호 영문 기재 보존: 단, 센티미터(cm), 킬로그램(kg), 그램(g), 미터(m), 리터(L), 밀리리터(ml), 밀리미터(mm)와 같은 실용 수치 단위는 예외적으로 영문 기호 그대로(예: cm, kg, g...) 노출 기재할 수 있으며 권장됩니다.
+    8. 길이 요건: ${limitWord}. 각 추천 문장들의 최종 도출 길이는 반드시 이 수치 요건을 철저히 준수하십시오.
+    9. ★★★ [초특급 중요] 10개 추천 문장의 복사 및 중복/유사 생성 절대 금지:
        하나의 관찰 요소에 대응해 생성되는 10개의 문장은 **첫 어미, 도입 부사, 중간의 서사 구조, 어조 뉘앙스가 완전히 독립적인 10개 고유의 다채로운 독창 문장**이어야 합니다.
        단 한 개라도 동일한 문장이나 어휘 몇 가지만 바꾼 복사판 문장(자가 복제)이 포함될 시 심각한 오류로 간주됩니다.
        서로 다 다른 상황(역할 책임, 참여 자세, 동료 소통, 성찰 태도)에 입각하여 각기 개성 있는 문맥으로 창조하여 1번부터 10번까지의 다양성을 극대화하십시오.
 
-    8. ★6★ [기재 품질 & 느낌 극대화 예시 지침 (Few-Shot)]
+    10. ★6★ [기재 품질 & 느낌 극대화 예시 지침 (Few-Shot)]
        반드시 다음의 실제 학교 현장 우수 평어 작성 느낌과 문장 스타일에 입각하여 추천 문장들을 생성해 주십시오:
        [우수 작성 예시]
        - (행사/개학 등): "바른 마음과 자세로 개학식에 참여하여 계획적이고 규칙적이며 안전한 생활을 위해 노력할 것을 다짐함.", "개학식에 바른 자세로 참여하며 밝게 웃으며 친구들과 인사하고 자신의 책상과 사물함 주변을 정리함.", "방학과제물을 잘 챙겨 개학식에 참여하고 친구들과 반갑게 인사하며 남은 생활을 알차게 보낼 것을 다짐함."
@@ -698,7 +762,7 @@ app.post("/api/generate-creative-recommendations", async (req, res) => {
        - (교육/안전 등): "가정폭력예방교육에 참여하여 가정폭력이 일어나는 상황을 찾아보고 가정폭력에 대한 대처 방법을 알아봄."
 
        이러한 예시의 느낌처럼 극도로 실제적이고 정갈하며, '진지한 자세', '책임감', '자기반성', '자기주도적 참여 및 성찰 행동'이 묻어나는 자연스러운 문장을 만드십시오. 불필요하고 추상적인 미사여구는 자제하십시오.
-    ${additionalInstructions ? `9. 선생님 의뢰 추가 요건:\n${additionalInstructions}` : ""}`;
+    ${additionalInstructions ? `11. 선생님 의뢰 추가 요건:\n${additionalInstructions}` : ""}`;
 
     const promptUser = `위 지침과 아래 정보를 토대로, 창체 영역 "${domain}", 주제 "${topic}" 하에서 
 아래 관찰 요소들 각각에 대해 완벽하게 관련된 고품격 추천 기재 문구를 요소별로 10개씩 생성해 주세요.
@@ -796,7 +860,7 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
         element: group.element || "",
         items: Array.isArray(group.items) ? group.items.map((it: any) => ({
           id: it.id || Math.random(),
-          recommendedText: it.recommendedText || it.text || ""
+          recommendedText: sanitizeRecordText(it.recommendedText || it.text || "")
         })) : []
       }));
     } else if (Array.isArray(data)) {
@@ -804,7 +868,7 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
         element: selectedElementsList[0] || "",
         items: data.map((item: any) => ({
           id: item.id || Math.random(),
-          recommendedText: item.recommendedText || item.text || ""
+          recommendedText: sanitizeRecordText(item.recommendedText || item.text || "")
         }))
       }];
     } else {
@@ -813,7 +877,7 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
         element: selectedElementsList[0] || "",
         items: Object.keys(items).length > 0 ? items.map((item: any) => ({
           id: item.id || Math.random(),
-          recommendedText: item.recommendedText || item.text || ""
+          recommendedText: sanitizeRecordText(item.recommendedText || item.text || "")
         })) : []
       }];
     }
@@ -1051,16 +1115,7 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
       }];
     }
 
-    if (results.length === 0 || results[0].items.length === 0) {
-      throw new Error("AI 엔진이 올바른 추천 문구를 1개 이상 생성하는 데 실패했습니다. 원격 AI 안전 필터가 발동했거나 사용된 API 키의 할당량 한도 초과, 혹은 키 불일치 상태일 수 있습니다.");
-    }
-
-    res.json({ results });
-  } catch (error: any) {
-    console.error("Error generating creative recommendations:", error);
-    res.status(500).json({ error: formatServerErrorMessage(error) });
-  }
-});
+// COMMENT END TRANSITION
 */
 
 // Configure client assets serving / Dev server setup
