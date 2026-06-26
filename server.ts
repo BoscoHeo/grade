@@ -522,32 +522,23 @@ app.post("/api/generate-records", async (req, res) => {
 
     const toneInstructionMap = {
       noun: "★초특급 지침★ 모든 문장은 반드시 명사형 종결어미인 '~함.' 또는 '~임.'(마침표 포함)으로만 종료되어야 합니다. '~다.'나 '~함'(마침표 누락)은 절대 금지되며, 특히 '~할 수 있음', '~수 있음' 등의 표기는 기록 규정 금기 사항이므로 절대 노출해서는 안 됩니다.",
-      respect: "★초특급 지침★ 모든 문장은 예외 없이 반드시 개조식 명사형 종결어미인 '~함.' 또는 '~임.'(마침표 포함)으로만 깔끔하게 종료되어야 합니다. (~합니다. ~수 있음. ~할 수 있음. 은 전면 금지 사항입니다.)",
-      special: "★초특급 지침★ 문장 종결 표현은 반드시 '~함이 돋보임.', '~하는 모습을 보임.', '~에 기여함.'과 같이 최종 머리부터 끝매듭까지 반드시 '~함.', '~임.'(마침표 포함) 형태로 완결되어야 합니다. '~할 수 있음.', '~수 있음.' 등은 사용할 수 없습니다.",
+      respect: "★초특급 지침★ 모든 문장은 예외 없이 반드시 개조식 명사형 종결어미인 '~함.' 또는 '~임.'(마침표 포함)으로만 깔끔하게 종료되어야 합니다. (~합니다, ~수 있음, ~할 수 있음은 전면 금지)",
+      special: "★초특급 지침★ 문장 끝맺음은 반드시 '~함이 돋보임.', '~하는 모습을 보임.', '~에 기여함.'과 같이 최종 어미가 '~함.', '~임.'(마침표 포함) 형태로 완결되어야 합니다. '~할 수 있음.', '~수 있음.' 등은 절대 금지됩니다."
     };
 
     const focusInstructions: string[] = [];
-    // [요구사항 반영] 평가 요소에 없는 내용은 가급적 작성하지 않기 (엄밀한 팩트 준수 교사 지침)
-    focusInstructions.push("- ★★★ 극도로 중요 지침 (평가 요소 엄수): 기재된 평가 요소(evaluationElement) 및 성취기준 내용에 등장하지 않는 완전히 인조적이거나 상상해낸 행동 사실, 구체적 사건 일화, 사적인 성격 묘사 등 '근거에 없는 뜬금없는 과외 사실/사적 활동'은 절대로 지어내서 적지 마십시오. 오직 전달된 평가 요소와 학생이 가진 등급 수준(매우 잘함, 잘함, 보통, 노력요함) 에 입각하여 단정하고 투명한 사실 위주로만 핵심을 축약 서술하여 가공하여야 합니다.");
-    // [요구사항 반영] 교과학습 발달상황에 있는 평가요소는 자료를 올릴 경우 그 내용을 그대로 반영해줘
-    focusInstructions.push("- ★★★ 극도로 중요 지침 (평가 요소 원안 준수 및 미변형): 사용자가 올린 성적 자료나 직접 입력하여 등록한 각 과목 평가 요인의 '평가 요소(evaluationElement)' 핵심 문장 및 키워드(예: '글을 바르게 고쳐 쓰기', '문형 구조 파악하기' 등)는 기재 평어를 생성할 때 함부로 바꾸거나 다듬지 말아야 하며, **그 평가 요소를 있는 그대로 문장에 온전히 삽입하고 노출시켜 반영**하여야 합니다. 평가 요소 전체를 왜곡하거나 소실시키지 말고 원형을 존중하여 최종 피드백 문구를 생성하십시오.");
-    // [요구사항 반영] 영문 및 특수문자 금지, 단위 제외, 할 수 있음 금지
-    focusInstructions.push("- ★★★ 영문 및 수학적/연산 특수부호 기재 전면 금지: 문장 내에 어떠한 연산 기호나 수학 관련 부호(+, -, x, X, *, / 등)를 절대 그냥 적지 마십시오. 예컨대 '+', '-', 'x'는 기하급수적으로 감점되는 금기 부호이므로 무조건 '덧셈과 뺄셈', '곱셈', '나눗셈' 등 친절한 순수 한글 용어로 풀어서 작성해야 합니다.");
-    focusInstructions.push("- ★★★ 단위 기호 영문 기재 보존: 단, 센티미터(cm), 킬로그램(kg), 그램(g), 미터(m), 리터(L), 밀리리터(ml), 밀리미터(mm)와 같은 실용 수치 단위는 예외적으로 영문 기호 그대로(예: cm, kg, g...) 노출 기재할 수 있으며 권장됩니다.");
-
-    if (focusAreas.growthOriented) {
-      focusInstructions.push("- '노력요함'이나 빈칸이라 하더라도 부정적인 평가 대신, 향후 '성장할 수 있는 잠재력이나 격려, 구체적인 지도 조언' 방향으로 성장 지향적으로 표현해주세요.");
-    } else {
-      focusInstructions.push("- 학생의 실제 능력 상태를 객관적으로 서술해주세요.");
-    }
-    if (focusAreas.activeParticipation) {
-      focusInstructions.push("- 배움 과정에 자기주도적으로 참여하거나 돋보인 태도, 적극성, 흥미 등의 정의적 성향을 성취 등급과 조화롭게 표현하세요.");
-    }
-    if (focusAreas.concreteExamples) {
-      focusInstructions.push("- 평가요소를 기반으로 한 구체적인 행동 행동 양식과 어휘를 다양하게 선택하여 실질적이고 차별화된 피드백을 구성해주세요.");
-    }
-    if (focusAreas.preventDuplication) {
-      focusInstructions.push("- 각 학생마다 문장의 문형 구조(예: 시작 어휘, 연결 방식, 조사 활용)를 완전히 차별화하여, 동일 성취도의 학생끼리 비슷한 문구로 도배되지 않도록 극도로 다양화된 어휘를 사용해주십시오.");
+    if (focusAreas && Array.isArray(focusAreas)) {
+      focusAreas.forEach((area: string) => {
+        if (area === "growth") {
+          focusInstructions.push("- [성장 중심 피드백]: 학생의 도전 과정, 미흡한 부분에서 도출된 변화 양상 및 발전 모습을 서술 흐름으로 꼭 담아주십시오.");
+        } else if (area === "attitude") {
+          focusInstructions.push("- [학습 태도 강조]: 수업 시간의 경청 태도, 모둠 협동 참여 태도, 질문 빈도, 끈기 있는 수행 태도를 중점적으로 반영하십시오.");
+        } else if (area === "uniqueness") {
+          focusInstructions.push("- [개인 특성 부각]: 기성 틀에 박힌 표현을 피하고, 학생만의 관찰된 독특하고 고유한 행동 특성 위주로 풍성하게 표현하십시오.");
+        } else if (area === "diversity") {
+          focusInstructions.push("- 각 학생마다 문장의 문형 구조(예: 시작 어휘, 연결 방식, 조사 활용)를 완전히 차별화하여, 동일 성취도의 학생끼리 비슷한 문구로 도배되지 않도록 극도로 다양화된 어휘를 사용해주십시오.");
+        }
+      });
     }
 
     if (creativityLevel === "low") {
@@ -562,8 +553,10 @@ app.post("/api/generate-records", async (req, res) => {
    절대로 문장의 맨 앞을 "\${studentName}은/는" 또는 "\${studentName}(이)는" 등으로 학생 이름을 주어로 기재하여 문장을 시작하지 마십시오. 이름으로 문장 맨 처음을 여는 것은 매우 상투적이며 어색하므로 절대적으로 금합니다. 주어를 교묘히 완전히 생략하거나, 바로 수행평가 실천 사실, 구체적 지식적/정의적 역량 수준, 또는 배움 활동의 태도에서부터 자연스럽고 매끄럽게 문장을 전개하십시오. 이름은 문장 중간 혹은 서술 도중에 자연스러운 일부분으로만 한 범주로 녹여 넣으십시오(예: "...에서 탁월함을 보여 \${studentName}의 발표 역량을 전파함.").
 2. ★★★ 따옴표 절대 자제 지침:
    문장에 큰따옴표(")는 완벽하게 사용을 금지합니다. 오직 필요한 최소한의 명사/단어 강조의 경우에만 작은따옴표(')를 사용하십시오.
-3. 어조 지침: ${toneInstructionMap[tone as keyof typeof toneInstructionMap] || toneInstructionMap.noun}
-4. 길이 요건: 공백 포함 최대 ${maxLength || 1000}자 이내(실제 학교생활기록부 등재 규격이므로 절대 엄수).
+3. ★★★ 자연스러운 관계어 사용 지침:
+   학급 내 다른 학생을 표현할 때 '급우'라는 다소 딱딱하고 인위적인 한자어 표현은 절대 사용하지 마십시오. 대신 '친구', '또래', '동료', '모둠원', '학급 친구', '주변 친구' 등 교실 현장에서 널리 쓰이는 자연스럽고 고운 한국어 표현을 적극 활용하여 기재하십시오.
+4. 어조 지침: ${toneInstructionMap[tone as keyof typeof toneInstructionMap] || toneInstructionMap.noun}
+5. 길이 요건: 공백 포함 최대 ${maxLength || 1000}자 이내(실제 학교생활기록부 등재 규격이므로 절대 엄수).
 ${focusInstructions.join("\n")}
 ${additionalInstructions ? `4. 선생님 의뢰 추가 요건:\n${additionalInstructions}` : ""}`;
 
@@ -648,34 +641,37 @@ ${chunk.map((st, i) => `${i + 1}. 이칭번호: ${st.id}, 이름: ${st.name}, �
                       type: Type.STRING,
                       description: "지침에 맞게 한글로 생성된 완성형 교과학습 발달상황 문구",
                     },
-                  },
-                },
-              },
-            },
+                  }
+                }
+              }
+            }
           });
 
-          const chunkResultText = response.text || "[]";
-          chunkResults = JSON.parse(chunkResultText);
+          const textResponse = response.text || "[]";
+          let cleanText = textResponse.trim();
+          if (cleanText.startsWith("```")) {
+            cleanText = cleanText.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/, "").trim();
+          }
+          chunkResults = JSON.parse(cleanText);
         }
 
-        if (Array.isArray(chunkResults)) {
-          return chunkResults.map((item: any) => ({
-            ...item,
-            recordText: sanitizeRecordText(item.recordText, item.studentName),
-          }));
-        }
-      } catch (err) {
-        console.error("Failed to parse JSON for chunk:", err);
+        return chunkResults.map((item: any) => ({
+          studentId: item.studentId || "",
+          studentName: item.studentName || "",
+          studentNumber: item.studentNumber || "",
+          gradesSummary: item.gradesSummary || "",
+          recordText: sanitizeRecordText(item.recordText || item.text || item.recommendedText || "")
+        }));
+      } catch (err: any) {
+        console.error(`Error in chunk ${chunkIdx}:`, err);
+        return chunk.map(st => ({
+          studentId: st.id,
+          studentName: st.name,
+          studentNumber: st.number || "",
+          gradesSummary: "",
+          recordText: `${subject} 과목 평가 요소를 전반적으로 성실히 수행하였으며, 세부 학습 내용 중심 피드백 수행을 적극 실천함.`
+        }));
       }
-
-      // Fallback placeholder formatting
-      return chunk.map((st) => ({
-        studentId: st.id,
-        studentName: st.name,
-        studentNumber: st.number,
-        gradesSummary: "평취 추출 완료",
-        recordText: `수행 평가 영역의 고찰 요소를 전반적으로 성실히 수행하였으며, 세부 학습 내용 중심 피드백 수행을 적극 실천함.`,
-      }));
     });
 
     const chunkResultsArray = await Promise.all(chunkPromises);
@@ -744,7 +740,9 @@ app.post("/api/generate-creative-recommendations", async (req, res) => {
        예컨대 관찰 요소가 3개 있다면, 요소A 전용 문장 10개, 요소B 전용 문장 10개, 요소C 전용 문장 10개로 완전히 분리 구획하여 결과를 반환해야 합니다.
     4. ★7★ 일상적이지 않은 문어체 극찬/상투어 절대 배제 지침:
        '~에 귀감이 됨', '타의 모범이 됨', '숭고한 정신', '훌륭한 성품', '존경을 받음', '모범적이고' 처럼 지나치게 인위적이고 과장되었거나 비일상적이며 구태의연한 기재 상투어는 **절대 지양**하십시오. 대신, 구체적으로 어떤 활동을 성실히 수행했는지, 동료와 어떻게 소통하며 배려했는지 등의 **사실에 기반한 다정하면서도 세련되고 담백한 교실 관찰문**(예: ~에 주도적으로 임함, ~에 기여함, ~에서 성실히 역할을 발휘함, ~하며 배려와 협력을 실현함 등)으로 작성하십시오.
-    5. 어조 지침: ${toneInstructionMap[tone as keyof typeof toneInstructionMap] || toneInstructionMap.noun}
+    5. ★7★ 자연스러운 관계어 사용 지침:
+       '급우'라는 딱딱하고 번역투 같은 한자어 대신, 교실의 온정 있고 친근한 관계를 나타내는 '친구', '또래', '동료', '모둠원', '학급 친구', '주변 친구' 등 한결 유연하고 자연스러운 고유어 및 생활 한국어 표현을 절대적으로 사용하여 작성해 주십시오. '급우'라는 단어 사용은 완전히 배제해야 합니다.
+    6. 어조 지침: ${toneInstructionMap[tone as keyof typeof toneInstructionMap] || toneInstructionMap.noun}
     6. ★Link★ 영문 및 수학적/연산 특수부호 기재 전면 금지: 문장 내에 어떠한 연산 기호나 사칙 부호(+, -, x, X, *, / 등)를 절대 그대로 적지 마십시오. 예컨대 '+', '-', 'x'는 기하급수적으로 감점되는 기재 금기 부호이므로 무조건 '덧셈과 뺄셈', '곱셈', '나눗셈' 등 친절한 순수 한글 용어로 풀어서 작성해야 합니다.
     7. ★Link★ 단위 기호 영문 기재 보존: 단, 센티미터(cm), 킬로그램(kg), 그램(g), 미터(m), 리터(L), 밀리리터(ml), 밀리미터(mm)와 같은 실용 수치 단위는 예외적으로 영문 기호 그대로(예: cm, kg, g...) 노출 기재할 수 있으며 권장됩니다.
     8. 길이 요건: ${limitWord}. 각 추천 문장들의 최종 도출 길이는 반드시 이 수치 요건을 철저히 준수하십시오.
@@ -764,8 +762,24 @@ app.post("/api/generate-creative-recommendations", async (req, res) => {
        이러한 예시의 느낌처럼 극도로 실제적이고 정갈하며, '진지한 자세', '책임감', '자기반성', '자기주도적 참여 및 성찰 행동'이 묻어나는 자연스러운 문장을 만드십시오. 불필요하고 추상적인 미사여구는 자제하십시오.
     ${additionalInstructions ? `11. 선생님 의뢰 추가 요건:\n${additionalInstructions}` : ""}`;
 
+    const randomSeed = Math.floor(Math.random() * 100000);
     const promptUser = `위 지침과 아래 정보를 토대로, 창체 영역 "${domain}", 주제 "${topic}" 하에서 
 아래 관찰 요소들 각각에 대해 완벽하게 관련된 고품격 추천 기재 문구를 요소별로 10개씩 생성해 주세요.
+(생성 무작위 시드 코드: ${randomSeed} - 매 요청마다 완전히 새로운 독립적 서사와 문법 구조를 갖출 것.)
+
+[★★ 10개 문장 고유성 부여 지침 ★★]
+각 관찰 요소별로 생성하는 10개의 문장은 **절대로 비슷하거나 단어만 바꾼 동일한 문장이어서는 안 됩니다.**
+각 번호(1~10안)는 다음의 각기 다른 실제 교실 상황 및 태도를 반영하여 전혀 다른 성향의 개성 있는 내용으로 각각 고유하게 작성해 주십시오:
+- 1안 (주도성): 주도적으로 참여하여 솔선수범하는 리더십 성향의 상황
+- 2안 (협업): 팀원들과 대화하고 공감하며 의사소통을 매끄럽게 이끄는 협력적 모습
+- 3안 (책임감): 튀지 않으나 맡은 바 책임을 성실히 묵묵하게 이행하는 자세
+- 4안 (배려): 어려움을 겪는 동료를 먼저 발견하고 배려와 나눔을 발휘하는 우정
+- 5안 (자기성찰): 활동 과정에서 스스로의 실수를 돌아보고 피드백을 적용하는 깊은 성찰 태도
+- 6안 (창의성): 탐구심이 넘쳐 창의적인 제안이나 새로운 시각을 보태는 주관적 관점
+- 7안 (준법/모범): 약속이나 규칙을 매우 준수하며 안전하고 올바른 태도로 모범이 되는 일상
+- 8안 (인내심): 힘든 상황에서도 포기하지 않고 끈기 있게 역할을 완수해내는 인내심
+- 9안 (경청/도움): 상대방의 소견이나 조언을 주의 깊게 경청하고 조화롭게 녹여내는 조력자 자세
+- 10안 (내면화): 활동의 목적과 의미를 깊이 이해하고 실천 가치를 내면화하는 자세
 
 [요청 관찰 요소 목록]
 ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
@@ -915,7 +929,8 @@ app.post("/api/generate-creative-elements", async (req, res) => {
 - (예시): "블록 코딩 알고리즘 구현 중 난관을 겪는 조원을 위해 버그 수정 가이드를 찬찬히 조언함"
 
 ★ 중대한 기재 수칙 지침:
-'귀감이 됨', '타의 모범이 됨', '숭고한 정신', '훌륭한 성품', '존경을 받음' 처럼 과장되고 고루하며 일상적이지 않은 문어체 극찬 수준의 표현은 **절대 배제**하십시오. 교실 현장에서 흔히 목격되는 학생들의 자연스럽고 구체적이며 담백한 참여 및 소통 모습(주도적 임함, 솔선수범하여 수행함, 친절하게 도움, 해결책을 제안함 등)에 관한 사실 위주로 추천 문구를 작성해 주어야 합니다.
+- '귀감이 됨', '타의 모범이 됨', '숭고한 정신', '훌륭한 성품', '존경을 받음' 처럼 과장되고 고루하며 일상적이지 않은 문어체 극찬 수준의 표현은 **절대 배제**하십시오. 교실 현장에서 흔히 목격되는 학생들의 자연스럽고 구체적이며 담백한 참여 및 소통 모습(주도적 임함, 솔선수범하여 수행함, 친절하게 도움, 해결책을 제안함 등)에 관한 사실 위주로 추천 문구를 작성해 주어야 합니다.
+- 또한, 딱딱하거나 상투적인 '급우'라는 표현을 일절 배제하고, 대신 '친구', '또래', '동료', '모둠원', '학급 친구', '주변 친구' 등 교감 있고 한층 자연스러운 어휘를 활용하십시오.
 
 각 요소는 대략 30자~70자 정도의 짧고 간결한 명사형 종결이나 어미절 (~함, ~의 모습을 보임, ~에 기여함 등) 형식으로 작성하십시오.
 
@@ -989,134 +1004,7 @@ app.post("/api/generate-creative-elements", async (req, res) => {
   }
 });
 
-/* DUP_START
-   전체 요소를 한데 뭉개어 섞어서 문장을 만드는 것이 아니라, 제공된 N개의 개별 관찰 요소 각각 하나당 각각 그 요소만을 주제로 삼은 개성 넘치는 추천 문장을 10개씩 만들어 주십시오.
-   예컨대 관찰 요소가 3개 있다면, 요소A 전용 문장 10개, 요소B 전용 문장 10개, 요소C 전용 문장 10개로 완전히 분리 구획하여 결과를 반환해야 합니다.
-4. 어조 지침: ${toneInstructionMap[tone as keyof typeof toneInstructionMap] || toneInstructionMap.noun}
-5. 길이 요건: ${limitWord}. 각 추천 문장들의 최종 도출 길이는 반드시 이 수치 요건을 철저히 준수하십시오.
-6. 문장 다양성 극대화: 각 관찰 요소별로 생성된 10개의 예시들은 첫 시작 어휘와 부사, 서사 구조가 단 한 줄도 유사하지 않도록 전면 다채롭게 격별하여 작성하십시오.
-${additionalInstructions ? `7. 선생님 의뢰 추가 요건:\n${additionalInstructions}` : ""}`;
 
-    const promptUser = `위 지침과 아래 정보를 토대로, 창체 영역 "${domain}", 주제 "${topic}" 하에서 
-아래 관찰 요소들 각각에 대해 완벽하게 관련된 고품격 추천 기재 문구를 요소별로 10개씩 생성해 주세요.
-
-[요청 관찰 요소 목록]
-${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
-
-출력은 반드시 규율된 JSON 오브젝트 형태여야 하며, 다음과 같은 구조를 충족해야 합니다:
-{
-  "results": [
-    {
-      "element": "[관찰 요소 명칭 그대로 기재]",
-      "items": [
-        { "id": 1, "recommendedText": "[지침들을 완벽히 준수하며 생성된 첫 번째 문장]" },
-        { "id": 2, "recommendedText": "[지침들을 완벽히 준수하며 생성된 두 번째 문장]" },
-        ... (총 10개 채우기)
-      ]
-    },
-    ... (사용자가 입력한 관찰 요소 개수만큼의 그룹화 원소 삽입)
-  ]
-}
-구조적 오류가 없도록 올바른 JSON 포맷을 유지하여 줄 것이며, JSON 외에 다른 서설이나 주석 텍스트를 절대 반환하지 마십시오.`;
-
-    let responseText = "";
-
-    if (provider === "openai") {
-      const apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY;
-
-      if (!apiKey) {
-        return res.status(400).json({ error: "오픈AI API 키가 설정되지 않았습니다. 우측 상단 메뉴에서 관리자 키를 입력해 주세요." });
-      }
-
-      const messages = [
-        { role: "system", content: systemInstruction },
-        { role: "user", content: promptUser }
-      ];
-
-      responseText = await generateContentWithOpenAI(apiKey, selectedModel, messages, {
-        responseMimeType: "application/json",
-        temperature: tempValue
-      });
-    } else {
-      const ai = getGenAI(req);
-      const response = await generateContentWithRetryAndFallback(ai, {
-        model: selectedModel,
-        contents: promptUser,
-        config: {
-          systemInstruction,
-          temperature: tempValue,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            required: ["results"],
-            properties: {
-              results: {
-                type: Type.ARRAY,
-                description: "각 선택 요소별로 생성된 문장 그룹 리스트",
-                items: {
-                  type: Type.OBJECT,
-                  required: ["element", "items"],
-                  properties: {
-                    element: { type: Type.STRING, description: "기준 역할을 한 관찰 요소명" },
-                    items: {
-                      type: Type.ARRAY,
-                      description: "해당 요소 관련 10개 완성 문장",
-                      items: {
-                        type: Type.OBJECT,
-                        required: ["id", "recommendedText"],
-                        properties: {
-                          id: { type: Type.NUMBER, description: "그룹별 1~10 일련번호" },
-                          recommendedText: { type: Type.STRING, description: "이름 생략, 따옴표 자제 지표가 이행된 추천 기재 구절" }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      });
-
-      responseText = response.text || "[]";
-    }
-
-    let cleanText = responseText.trim();
-    if (cleanText.startsWith("```")) {
-      cleanText = cleanText.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/, "").trim();
-    }
-    const data = JSON.parse(cleanText);
-    let results: any[] = [];
-
-    if (data && Array.isArray(data.results)) {
-      results = data.results.map((group: any) => ({
-        element: group.element || "",
-        items: Array.isArray(group.items) ? group.items.map((it: any) => ({
-          id: it.id || Math.random(),
-          recommendedText: it.recommendedText || it.text || ""
-        })) : []
-      }));
-    } else if (Array.isArray(data)) {
-      results = [{
-        element: selectedElementsList[0] || "",
-        items: data.map((item: any) => ({
-          id: item.id || Math.random(),
-          recommendedText: item.recommendedText || item.text || ""
-        }))
-      }];
-    } else {
-      const items = data.sentences || data.items || [];
-      results = [{
-        element: selectedElementsList[0] || "",
-        items: Object.keys(items).length > 0 ? items.map((item: any) => ({
-          id: item.id || Math.random(),
-          recommendedText: item.recommendedText || item.text || ""
-        })) : []
-      }];
-    }
-
-// COMMENT END TRANSITION
-*/
 
 // Configure client assets serving / Dev server setup
 async function startServer() {

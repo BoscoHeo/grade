@@ -166,14 +166,8 @@ export async function clientGenerateCreativeRecommendations(options: {
     return returnedValue;
   } catch (error: any) {
     console.error("Failed to generate creative recommendations:", error);
-    // Return mock diverse sentences so users don't see blank page even if network fails
-    return selectedElementsList.map((el) => ({
-      element: el,
-      items: Array.from({ length: 10 }).map((_, i) => ({
-        id: i + 1,
-        recommendedText: `${topic} 활동과 관련하여, 동료들과 긍정적으로 소통하며 ${el} 행동을 주도적으로 실천해 모범이 됨.`
-      }))
-    }));
+    // Propagate the real error message to UI for proper troubleshooting (e.g. invalid key)
+    throw error;
   }
 }
 
