@@ -9,10 +9,12 @@ import {
 } from "lucide-react";
 
 interface CreativePlaygroundProps {
-  provider: "gemini" | "openai";
+  provider: "gemini" | "openai" | "groq" | "xai";
   model: string;
   geminiKey: string;
   openaiKey: string;
+  groqKey?: string;
+  xaiKey?: string;
   onShowKeyPanel: () => void;
 }
 
@@ -259,6 +261,8 @@ export default function CreativePlayground({
   model,
   geminiKey,
   openaiKey,
+  groqKey = "",
+  xaiKey = "",
   onShowKeyPanel
 }: CreativePlaygroundProps) {
   // Domain selection (2022 revised lists)
@@ -377,7 +381,9 @@ export default function CreativePlayground({
         provider,
         model,
         geminiKey,
-        openaiKey
+        openaiKey,
+        groqKey,
+        xaiKey
       });
 
       if (elements && elements.length > 0) {
@@ -428,7 +434,9 @@ export default function CreativePlayground({
         provider,
         model,
         geminiKey: geminiKey ? geminiKey.trim() : "",
-        openaiKey: openaiKey ? openaiKey.trim() : ""
+        openaiKey: openaiKey ? openaiKey.trim() : "",
+        groqKey: groqKey ? groqKey.trim() : "",
+        xaiKey: xaiKey ? xaiKey.trim() : ""
       });
 
       if (results && Array.isArray(results) && results.length > 0) {
@@ -619,7 +627,11 @@ export default function CreativePlayground({
     document.body.removeChild(link);
   };
 
-  const hasApiKey = (provider === "gemini" && geminiKey) || (provider === "openai" && openaiKey);
+  const hasApiKey = 
+    (provider === "gemini" && geminiKey) || 
+    (provider === "openai" && openaiKey) ||
+    (provider === "groq" && groqKey) ||
+    (provider === "xai" && xaiKey);
 
   return (
     <div id="creative-playground-container" className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

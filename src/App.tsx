@@ -46,9 +46,9 @@ export default function App() {
   const [showKeyPanel, setShowKeyPanel] = useState<boolean>(false);
   const [keySaveFeedback, setKeySaveFeedback] = useState<boolean>(false);
 
-  // OpenAI API Keys & model selection settings
-  const [selectedProvider, setSelectedProvider] = useState<"gemini" | "openai">(() => {
-    return (localStorage.getItem("USER_SELECTED_PROVIDER") as "gemini" | "openai") || "gemini";
+  // OpenAI, Groq, xAI API Keys & model selection settings
+  const [selectedProvider, setSelectedProvider] = useState<"gemini" | "openai" | "groq" | "xai">(() => {
+    return (localStorage.getItem("USER_SELECTED_PROVIDER") as "gemini" | "openai" | "groq" | "xai") || "gemini";
   });
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     return localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
@@ -56,16 +56,27 @@ export default function App() {
   const [userOpenAiKey, setUserOpenAiKey] = useState<string>(() => {
     return localStorage.getItem("USER_OPENAI_API_KEY") || "";
   });
+  const [userGroqKey, setUserGroqKey] = useState<string>(() => {
+    return localStorage.getItem("USER_GROQ_API_KEY") || "";
+  });
+  const [userXaiKey, setUserXaiKey] = useState<string>(() => {
+    return localStorage.getItem("USER_XAI_API_KEY") || "";
+  });
+  const [userAccessCode, setUserAccessCode] = useState<string>(() => {
+    return localStorage.getItem("USER_ACCESS_CODE") || "";
+  });
   const [isCustomModel, setIsCustomModel] = useState<boolean>(false);
 
-  const handleSaveProvider = (provider: "gemini" | "openai") => {
+  const handleSaveProvider = (provider: "gemini" | "openai" | "groq" | "xai") => {
     setSelectedProvider(provider);
     localStorage.setItem("USER_SELECTED_PROVIDER", provider);
     
     // Choose sensible default model for that provider
     const defaults = {
       gemini: "gemini-3.1-flash-lite",
-      openai: "gpt-4o-mini"
+      openai: "gpt-4o-mini",
+      groq: "llama-3.3-70b-versatile",
+      xai: "grok-2-1212"
     };
     const defaultModel = defaults[provider];
     setSelectedModel(defaultModel);
@@ -207,20 +218,32 @@ export default function App() {
   const handleSaveApiKey = () => {
     localStorage.setItem("USER_GEMINI_API_KEY", userApiKey.trim());
     localStorage.setItem("USER_OPENAI_API_KEY", userOpenAiKey.trim());
+    localStorage.setItem("USER_GROQ_API_KEY", userGroqKey.trim());
+    localStorage.setItem("USER_XAI_API_KEY", userXaiKey.trim());
+    localStorage.setItem("USER_ACCESS_CODE", userAccessCode.trim());
     setKeySaveFeedback(true);
     setTimeout(() => setKeySaveFeedback(false), 2000);
   };
 
   // Handler: Reset custom key
-  const handleResetApiKey = (pType: "gemini" | "openai") => {
+  const handleResetApiKey = (pType: "gemini" | "openai" | "groq" | "xai" | "accessCode") => {
     if (pType === "gemini") {
       setUserApiKey("");
       localStorage.removeItem("USER_GEMINI_API_KEY");
-    } else {
+    } else if (pType === "openai") {
       setUserOpenAiKey("");
       localStorage.removeItem("USER_OPENAI_API_KEY");
+    } else if (pType === "groq") {
+      setUserGroqKey("");
+      localStorage.removeItem("USER_GROQ_API_KEY");
+    } else if (pType === "xai") {
+      setUserXaiKey("");
+      localStorage.removeItem("USER_XAI_API_KEY");
+    } else {
+      setUserAccessCode("");
+      localStorage.removeItem("USER_ACCESS_CODE");
     }
-    alert(`${pType === "gemini" ? "Gemini" : "OpenAI"} API 키가 안전하게 지워졌습니다.`);
+    alert("정보가 안전하게 지워졌습니다.");
   };
 
   // Handler: Main multi-engine generation controller
@@ -244,7 +267,9 @@ export default function App() {
         provider: selectedProvider,
         model: selectedModel,
         geminiKey: userApiKey.trim(),
-        openaiKey: userOpenAiKey.trim()
+        openaiKey: userOpenAiKey.trim(),
+        groqKey: userGroqKey.trim(),
+        xaiKey: userXaiKey.trim()
       });
 
       if (results && Array.isArray(results)) {
@@ -390,9 +415,15 @@ export default function App() {
               {/* 1. Provider Tabs */}
               <div className="border-b border-slate-100 pb-2">
                 <label className="block text-xs font-bold text-slate-500 mb-2">1. 연동 인공지능 엔진(Provider) 선택</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["gemini", "openai"] as const).map((prov) => {
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(["gemini", "openai", "groq", "xai"] as const).map((prov) => {
                     const isSel = selectedProvider === prov;
+                    const labels = {
+                      gemini: "Google Gemini",
+                      openai: "OpenAI",
+                      groq: "Groq Cloud",
+                      xai: "xAI (Grok)"
+                    };
                     return (
                       <button
                         key={prov}
@@ -404,7 +435,7 @@ export default function App() {
                             : "bg-slate-50/50 hover:bg-slate-50 text-slate-600 border-slate-200 hover:text-slate-800"
                         }`}
                       >
-                        <span className="capitalize">{prov === "gemini" ? "Google Gemini" : "OpenAI"}</span>
+                        <span>{labels[prov]}</span>
                       </button>
                     );
                   })}
@@ -477,9 +508,110 @@ export default function App() {
                     )}
                   </div>
                 )}
+
+                {selectedProvider === "groq" && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="groq-key-input"
+                      type="password"
+                      value={userGroqKey}
+                      onChange={(e) => {
+                        setUserGroqKey(e.target.value);
+                        localStorage.setItem("USER_GROQ_API_KEY", e.target.value.trim());
+                      }}
+                      placeholder="Groq API 키 (gsk_...)를 입력하세요"
+                      className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveApiKey}
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                    >
+                      {keySaveFeedback ? "완료" : "등록"}
+                    </button>
+                    {userGroqKey && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetApiKey("groq")}
+                        className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-medium rounded-xl cursor-pointer"
+                      >
+                        지우기
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {selectedProvider === "xai" && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="xai-key-input"
+                      type="password"
+                      value={userXaiKey}
+                      onChange={(e) => {
+                        setUserXaiKey(e.target.value);
+                        localStorage.setItem("USER_XAI_API_KEY", e.target.value.trim());
+                      }}
+                      placeholder="xAI API 키 (xai-...)를 입력하세요"
+                      className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveApiKey}
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                    >
+                      {keySaveFeedback ? "완료" : "등록"}
+                    </button>
+                    {userXaiKey && (
+                      <button
+                        type="button"
+                        onClick={() => handleResetApiKey("xai")}
+                        className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-medium rounded-xl cursor-pointer"
+                      >
+                        지우기
+                      </button>
+                    )}
+                  </div>
+                )}
                 <p className="text-[10px] text-slate-400">
                   * 본 시스템은 보안 및 안정성을 위해 별도의 서버 공용 무료 키를 탑재하고 있지 않습니다. 원활한 평어 작성을 위해 위의 {selectedProvider.toUpperCase()} 개인 API 키를 비밀리에 연동등록하여 활용해 주시기 바랍니다. (입력하신 키는 오직 브라우저 로컬 저장소에만 전적으로 안전 보관됩니다.)
                 </p>
+              </div>
+
+              {/* Extra: Server access code option */}
+              <div className="space-y-1.5 border-t border-slate-100 pt-3">
+                <label className="block text-xs font-bold text-slate-500 flex items-center gap-1">
+                  <span>🔒 서버 보안 접속코드 (Access Code) 입력 (선택)</span>
+                  <span className="text-[10px] text-indigo-500 font-normal">(자체 서버 보안이 설정된 경우에만 입력하십시오)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="access-code-input"
+                    type="password"
+                    value={userAccessCode}
+                    onChange={(e) => {
+                      setUserAccessCode(e.target.value);
+                      localStorage.setItem("USER_ACCESS_CODE", e.target.value.trim());
+                    }}
+                    placeholder="지정한 보안 접속코드를 입력하세요 (생략 가능)"
+                    className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveApiKey}
+                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                  >
+                    {keySaveFeedback ? "완료" : "등록"}
+                  </button>
+                  {userAccessCode && (
+                    <button
+                      type="button"
+                      onClick={() => handleResetApiKey("accessCode" as any)}
+                      className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-medium rounded-xl cursor-pointer"
+                    >
+                      지우기
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* 3. Model select presets */}
@@ -516,11 +648,24 @@ export default function App() {
                         <option value="o3-mini">o3-mini (최신형 고성능 추론)</option>
                       </>
                     )}
+                    {selectedProvider === "groq" && (
+                      <>
+                        <option value="llama-3.3-70b-versatile">Llama 3.3 70B (속도와 고성능 추론 추천)</option>
+                        <option value="mixtral-8x7b-32768">Mixtral 8x7B (강력한 다중 언어/개념 통합)</option>
+                        <option value="gemma2-9b-it">Gemma 2 9B (구글 초경량 오픈 소스)</option>
+                      </>
+                    )}
+                    {selectedProvider === "xai" && (
+                      <>
+                        <option value="grok-2-1212">Grok 2 1212 (최신 고성능 Grok 모델)</option>
+                        <option value="grok-beta">Grok Beta (강력하고 창의적인 Grok)</option>
+                      </>
+                    )}
                     <option value="custom">직접 수동 기입...</option>
                   </select>
 
                   {/* Custom model text input if selected */}
-                  {(isCustomModel || !["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro", "gpt-4o-mini", "gpt-4o", "o1-mini", "o3-mini"].includes(selectedModel)) && (
+                  {(isCustomModel || !["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro", "gpt-4o-mini", "gpt-4o", "o1-mini", "o3-mini", "llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it", "grok-2-1212", "grok-beta"].includes(selectedModel)) && (
                     <div className="flex-1 flex gap-1.5 items-center">
                       <input
                         id="custom-model-text-input"
@@ -536,7 +681,9 @@ export default function App() {
                           setIsCustomModel(false);
                           const defaults = {
                             gemini: "gemini-3.1-flash-lite",
-                            openai: "gpt-4o-mini"
+                            openai: "gpt-4o-mini",
+                            groq: "llama-3.3-70b-versatile",
+                            xai: "grok-2-1212"
                           };
                           handleSaveModel(defaults[selectedProvider], false);
                         }}
@@ -567,6 +714,8 @@ export default function App() {
               model={selectedModel}
               geminiKey={userApiKey}
               openaiKey={userOpenAiKey}
+              groqKey={userGroqKey}
+              xaiKey={userXaiKey}
               onShowKeyPanel={() => setShowKeyPanel(true)}
             />
           </div>

@@ -26,10 +26,12 @@ async function fetchFromBackend(
   body: any,
   headers: Record<string, string>
 ): Promise<any> {
+  const accessCode = localStorage.getItem("USER_ACCESS_CODE") || "";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-access-code": accessCode,
       ...headers
     },
     body: JSON.stringify(body)
@@ -145,9 +147,9 @@ async function callOpenAIDirectly(
   apiKey: string,
   systemInstruction: string,
   prompt: string,
-  options: { responseMimeType?: string; temperature?: number; inlineData?: { mimeType: string; data: string } } = {}
+  options: { responseMimeType?: string; temperature?: number; inlineData?: { mimeType: string; data: string }; baseUrl?: string } = {}
 ): Promise<string> {
-  const url = "https://api.openai.com/v1/chat/completions";
+  const url = options.baseUrl ? `${options.baseUrl}/chat/completions` : "https://api.openai.com/v1/chat/completions";
 
   const messages: any[] = [];
   if (systemInstruction) {
@@ -279,12 +281,14 @@ export async function clientGenerateRecords(options: {
   criteria: any[];
   students: any[];
   config: any;
-  provider: "gemini" | "openai";
+  provider: "gemini" | "openai" | "groq" | "xai";
   model: string;
   geminiKey: string;
   openaiKey: string;
+  groqKey?: string;
+  xaiKey?: string;
 }) {
-  const { evaluationMode, criteria, students, config, provider, model, geminiKey, openaiKey } = options;
+  const { evaluationMode, criteria, students, config, provider, model, geminiKey, openaiKey, groqKey = "", xaiKey = "" } = options;
 
   if (students.length === 0) {
     throw new Error("평어를 생성할 학생이 없습니다.");
@@ -295,6 +299,8 @@ export async function clientGenerateRecords(options: {
     "x-selected-model": model,
     "x-gemini-api-key": geminiKey,
     "x-openai-api-key": openaiKey,
+    "x-groq-api-key": groqKey,
+    "x-xai-api-key": xaiKey,
   };
 
   const body = { evaluationMode, criteria, students, config };
@@ -305,7 +311,17 @@ export async function clientGenerateRecords(options: {
   } catch (error: any) {
     console.warn("Backend record generator not reachable or failed. Attempting direct browser-to-API fallback...", error);
     
-    const key = provider === "openai" ? openaiKey : geminiKey;
+    let key = geminiKey;
+    let baseUrl = "";
+    if (provider === "openai") key = openaiKey;
+    else if (provider === "groq") {
+      key = groqKey;
+      baseUrl = "https://api.groq.com/openai/v1";
+    } else if (provider === "xai") {
+      key = xaiKey;
+      baseUrl = "https://api.x.ai/v1";
+    }
+
     if (!key || !key.trim()) {
       throw new Error("정적 웹 호스팅(Cloudflare Pages 등) 환경에서는 화면 우측 상단의 [⚙️ AI 설정 및 API 키] 메뉴에서 본인의 API 키를 입력하셔야 평어 자동 생성이 작동합니다.");
     }
@@ -459,10 +475,11 @@ ${chunk.map((st, i) => `${i + 1}. 이칭번호: ${st.id}, 이름: ${st.name}, �
 구조적인 JSON 포맷으로 어떠한 사설이나 주석도 없이 오직 순수한 JSON만 반환해 주십시오.`;
 
         let responseText = "";
-        if (provider === "openai") {
+        if (provider === "openai" || provider === "groq" || provider === "xai") {
           responseText = await callOpenAIDirectly(model, key, systemInstruction, chunkPromptUser, {
             responseMimeType: "application/json",
-            temperature: tempValue
+            temperature: tempValue,
+            baseUrl: baseUrl || undefined
           });
         } else {
           responseText = await callGeminiDirectly(model, key, systemInstruction, chunkPromptUser, {
@@ -507,18 +524,22 @@ export async function clientGenerateCreativeRecommendations(options: {
   maxLength: number;           // 최대 자수
   creativityLevel: string;     // low, medium, high
   additionalInstructions: string;
-  provider: "gemini" | "openai";
+  provider: "gemini" | "openai" | "groq" | "xai";
   model: string;
   geminiKey: string;
   openaiKey: string;
+  groqKey?: string;
+  xaiKey?: string;
 }) {
-  const { domain, topic, element, elements, tone, maxLength, creativityLevel, additionalInstructions, provider, model, geminiKey, openaiKey } = options;
+  const { domain, topic, element, elements, tone, maxLength, creativityLevel, additionalInstructions, provider, model, geminiKey, openaiKey, groqKey = "", xaiKey = "" } = options;
 
   const headers = {
     "x-api-provider": provider,
     "x-selected-model": model,
     "x-gemini-api-key": geminiKey,
     "x-openai-api-key": openaiKey,
+    "x-groq-api-key": groqKey,
+    "x-xai-api-key": xaiKey,
   };
 
   const selectedElementsList = Array.isArray(elements) && elements.length > 0 
@@ -537,7 +558,17 @@ export async function clientGenerateCreativeRecommendations(options: {
   } catch (error: any) {
     console.warn("Backend recommendations failed. Attempting direct browser-to-API fallback...", error);
 
-    const key = provider === "openai" ? openaiKey : geminiKey;
+    let key = geminiKey;
+    let baseUrl = "";
+    if (provider === "openai") key = openaiKey;
+    else if (provider === "groq") {
+      key = groqKey;
+      baseUrl = "https://api.groq.com/openai/v1";
+    } else if (provider === "xai") {
+      key = xaiKey;
+      baseUrl = "https://api.x.ai/v1";
+    }
+
     if (!key || !key.trim()) {
       throw new Error("정적 웹 호스팅(Cloudflare Pages 등) 환경에서는 화면 우측 상단의 [⚙️ AI 설정 및 API 키] 메뉴에서 본인의 API 키를 입력하셔야 평어 생성 기능이 작동합니다.");
     }
@@ -659,10 +690,11 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
 
     try {
       let responseText = "";
-      if (provider === "openai") {
+      if (provider === "openai" || provider === "groq" || provider === "xai") {
         responseText = await callOpenAIDirectly(model, key, systemInstruction, promptUser, {
           responseMimeType: "application/json",
-          temperature: tempValue
+          temperature: tempValue,
+          baseUrl: baseUrl || undefined
         });
       } else {
         responseText = await callGeminiDirectly(model, key, systemInstruction, promptUser, {
@@ -716,10 +748,12 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
 interface GenerateCreativeElementsArgs {
   domain: string;
   topic: string;
-  provider: "gemini" | "openai";
+  provider: "gemini" | "openai" | "groq" | "xai";
   model: string;
   geminiKey: string;
   openaiKey: string;
+  groqKey?: string;
+  xaiKey?: string;
 }
 
 /**
@@ -731,7 +765,9 @@ export async function clientGenerateCreativeElements({
   provider,
   model,
   geminiKey,
-  openaiKey
+  openaiKey,
+  groqKey = "",
+  xaiKey = ""
 }: GenerateCreativeElementsArgs): Promise<string[]> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -739,6 +775,8 @@ export async function clientGenerateCreativeElements({
     "x-selected-model": model,
     "x-gemini-api-key": geminiKey,
     "x-openai-api-key": openaiKey,
+    "x-groq-api-key": groqKey,
+    "x-xai-api-key": xaiKey,
   };
 
   const body = { domain, topic };
@@ -749,7 +787,17 @@ export async function clientGenerateCreativeElements({
   } catch (error: any) {
     console.warn("Backend elements generation failed. Attempting direct browser-to-API fallback...", error);
 
-    const key = provider === "openai" ? openaiKey : geminiKey;
+    let key = geminiKey;
+    let baseUrl = "";
+    if (provider === "openai") key = openaiKey;
+    else if (provider === "groq") {
+      key = groqKey;
+      baseUrl = "https://api.groq.com/openai/v1";
+    } else if (provider === "xai") {
+      key = xaiKey;
+      baseUrl = "https://api.x.ai/v1";
+    }
+
     if (!key || !key.trim()) {
       // Return beautiful offline elements
       return [
@@ -815,10 +863,11 @@ export async function clientGenerateCreativeElements({
 
     try {
       let responseText = "";
-      if (provider === "openai") {
+      if (provider === "openai" || provider === "groq" || provider === "xai") {
         responseText = await callOpenAIDirectly(model, key, systemInstruction, promptUser, {
           responseMimeType: "application/json",
-          temperature: 0.7
+          temperature: 0.7,
+          baseUrl: baseUrl || undefined
         });
       } else {
         responseText = await callGeminiDirectly(model, key, systemInstruction, promptUser, {

@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com https://*.gcp.cx;"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.openai.com https://api.groq.com https://api.x.ai https://generativelanguage.googleapis.com; frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com https://*.gcp.cx;"
   );
   
   // Set X-Frame-Options to SAMEORIGIN, but verify if we are in development inside AI Studio to prevent bounding boxes block
@@ -36,6 +36,24 @@ app.use((req, res, next) => {
 // Enable JSON parsing for api endpoints with limits for base64 image uploads
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ limit: "20mb", extended: true }));
+
+// Access Code Security Middleware
+app.use((req, res, next) => {
+  const serverAccessCode = process.env.ACCESS_CODE;
+  if (serverAccessCode && serverAccessCode.trim()) {
+    // Only protect /api/ endpoints (except /api/health)
+    if (req.path.startsWith("/api/") && req.path !== "/api/health") {
+      const clientAccessCode = req.headers["x-access-code"] as string;
+      if (!clientAccessCode || clientAccessCode.trim() !== serverAccessCode.trim()) {
+        return res.status(401).json({
+          error: "ACCESS_CODE_REQUIRED",
+          message: "이 서버는 관리자가 지정한 접속 비밀번호(Access Code)가 필요합니다. 우측 상단의 [⚙️ AI 설정 및 API 키] 메뉴에서 올바른 패스워드를 입력해 주십시오."
+        });
+      }
+    }
+  }
+  next();
+});
 
 // Lazy initializer for Google Gen AI
 let aiInstance: GoogleGenAI | null = null;
@@ -256,9 +274,11 @@ async function generateContentWithOpenAI(
   options: {
     responseMimeType?: string;
     temperature?: number;
+    baseUrl?: string;
   } = {}
 ): Promise<string> {
-  const url = "https://api.openai.com/v1/chat/completions";
+  const baseUrl = options.baseUrl || "https://api.openai.com/v1";
+  const url = `${baseUrl}/chat/completions`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -330,11 +350,22 @@ app.post("/api/parse-table-image", async (req, res) => {
 
     let parsedJsonText = "";
 
-    if (provider === "openai") {
-      const apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY;
+    if (provider === "openai" || provider === "groq" || provider === "xai") {
+      let apiKey = "";
+      let baseUrl = "";
+      if (provider === "openai") {
+        apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY || "";
+        baseUrl = "https://api.openai.com/v1";
+      } else if (provider === "groq") {
+        apiKey = (req.headers["x-groq-api-key"] as string) || process.env.GROQ_API_KEY || "";
+        baseUrl = "https://api.groq.com/openai/v1";
+      } else if (provider === "xai") {
+        apiKey = (req.headers["x-xai-api-key"] as string) || process.env.XAI_API_KEY || process.env.GROK_API_KEY || "";
+        baseUrl = "https://api.x.ai/v1";
+      }
 
       if (!apiKey) {
-        return res.status(400).json({ error: "OpenAI 개인 API 키가 등록되어 있지 않습니다. 우측 상단 메뉴에서 API 키를 등록해 주세요." });
+        return res.status(400).json({ error: `${provider.toUpperCase()} API 키가 등록되어 있지 않습니다. 우측 상단 메뉴에서 API 키를 등록해 주세요.` });
       }
 
       const messages = [
@@ -354,7 +385,8 @@ app.post("/api/parse-table-image", async (req, res) => {
 
       parsedJsonText = await generateContentWithOpenAI(apiKey, selectedModel, messages, {
         responseMimeType: "application/json",
-        temperature: 0.1
+        temperature: 0.1,
+        baseUrl
       });
     } else {
       const ai = getGenAI(req);
@@ -612,10 +644,22 @@ ${chunk.map((st, i) => `${i + 1}. 이칭번호: ${st.id}, 이름: ${st.name}, �
       let chunkResults: any[] = [];
 
       try {
-        if (provider === "openai") {
-          const apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY;
+        if (provider === "openai" || provider === "groq" || provider === "xai") {
+          let apiKey = "";
+          let baseUrl = "";
+          if (provider === "openai") {
+            apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY || "";
+            baseUrl = "https://api.openai.com/v1";
+          } else if (provider === "groq") {
+            apiKey = (req.headers["x-groq-api-key"] as string) || process.env.GROQ_API_KEY || "";
+            baseUrl = "https://api.groq.com/openai/v1";
+          } else if (provider === "xai") {
+            apiKey = (req.headers["x-xai-api-key"] as string) || process.env.XAI_API_KEY || process.env.GROK_API_KEY || "";
+            baseUrl = "https://api.x.ai/v1";
+          }
+
           if (!apiKey) {
-            throw new Error("오픈AI API 키가 설정되지 않았습니다.");
+            throw new Error(`${provider.toUpperCase()} API 키가 등록되어 있지 않습니다.`);
           }
 
           const messages = [
@@ -625,7 +669,8 @@ ${chunk.map((st, i) => `${i + 1}. 이칭번호: ${st.id}, 이름: ${st.name}, �
 
           const responseText = await generateContentWithOpenAI(apiKey, selectedModel, messages, {
             responseMimeType: "application/json",
-            temperature: tempValue
+            temperature: tempValue,
+            baseUrl
           });
 
           let cleanText = responseText.trim();
@@ -858,11 +903,22 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
 
     let responseText = "";
 
-    if (provider === "openai") {
-      const apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY;
+    if (provider === "openai" || provider === "groq" || provider === "xai") {
+      let apiKey = "";
+      let baseUrl = "";
+      if (provider === "openai") {
+        apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY || "";
+        baseUrl = "https://api.openai.com/v1";
+      } else if (provider === "groq") {
+        apiKey = (req.headers["x-groq-api-key"] as string) || process.env.GROQ_API_KEY || "";
+        baseUrl = "https://api.groq.com/openai/v1";
+      } else if (provider === "xai") {
+        apiKey = (req.headers["x-xai-api-key"] as string) || process.env.XAI_API_KEY || process.env.GROK_API_KEY || "";
+        baseUrl = "https://api.x.ai/v1";
+      }
 
       if (!apiKey) {
-        return res.status(400).json({ error: "오픈AI API 키가 설정되지 않았습니다. 우측 상단 메뉴에서 관리자 키를 입력해 주세요." });
+        return res.status(400).json({ error: `${provider.toUpperCase()} API 키가 등록되어 있지 않습니다. 우측 상단 메뉴에서 API 키를 등록해 주세요.` });
       }
 
       const messages = [
@@ -872,7 +928,8 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
 
       responseText = await generateContentWithOpenAI(apiKey, selectedModel, messages, {
         responseMimeType: "application/json",
-        temperature: tempValue
+        temperature: tempValue,
+        baseUrl
       });
     } else {
       const ai = getGenAI(req);
@@ -1030,11 +1087,22 @@ app.post("/api/generate-creative-elements", async (req, res) => {
 
     let responseText = "";
 
-    if (provider === "openai") {
-      const apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY;
+    if (provider === "openai" || provider === "groq" || provider === "xai") {
+      let apiKey = "";
+      let baseUrl = "";
+      if (provider === "openai") {
+        apiKey = (req.headers["x-openai-api-key"] as string) || process.env.OPENAI_API_KEY || "";
+        baseUrl = "https://api.openai.com/v1";
+      } else if (provider === "groq") {
+        apiKey = (req.headers["x-groq-api-key"] as string) || process.env.GROQ_API_KEY || "";
+        baseUrl = "https://api.groq.com/openai/v1";
+      } else if (provider === "xai") {
+        apiKey = (req.headers["x-xai-api-key"] as string) || process.env.XAI_API_KEY || process.env.GROK_API_KEY || "";
+        baseUrl = "https://api.x.ai/v1";
+      }
 
       if (!apiKey) {
-        return res.status(400).json({ error: "오픈AI API 키가 설정되지 않았습니다." });
+        return res.status(400).json({ error: `${provider.toUpperCase()} API 키가 등록되어 있지 않습니다. 우측 상단 메뉴에서 API 키를 등록해 주세요.` });
       }
 
       const messages = [
@@ -1044,7 +1112,8 @@ app.post("/api/generate-creative-elements", async (req, res) => {
 
       responseText = await generateContentWithOpenAI(apiKey, selectedModel, messages, {
         responseMimeType: "application/json",
-        temperature: 0.7
+        temperature: 0.7,
+        baseUrl
       });
     } else {
       const ai = getGenAI(req);
