@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "build:frontend": "vite build --configLoader runner",
+    "build:backend": "node scripts/build-backend.mjs",
+    "build": "npm run build:frontend && npm run build:backend && npm run check:artifacts",
+    "check:artifacts": "node scripts/check-artifacts.mjs",
+    "test:artifacts": "node --test scripts/check-artifacts.test.mjs",
+    "start": "node dist/backend/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
