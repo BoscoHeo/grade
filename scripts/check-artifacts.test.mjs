@@ -69,3 +69,15 @@ test('별도 map 파일이 없어도 inline source map 참조를 거절함', (t)
   assert.equal(result.issues.length, 1);
   assert.ok(result.issues[0].reason.includes('source map'));
 });
+
+// Only frontend provider URLs are forbidden; backend provider calls remain allowed.
+for (const host of ['generativelanguage.googleapis.com', 'api.openai.com', 'api.groq.com', 'api.x.ai']) {
+  test(`frontend rejects direct provider URL: ${host}`, (t) => {
+    const options = fixture(t);
+    fs.writeFileSync(path.join(options.frontendDir, 'assets/app.js'), `fetch("https://${host}/fixture")`);
+    assert.equal(checkArtifacts(options).issues.length, 1);
+    fs.writeFileSync(path.join(options.frontendDir, 'assets/app.js'), 'console.log("fixture")');
+    fs.writeFileSync(options.backendFile, `fetch("https://${host}/fixture")`);
+    assert.deepEqual(checkArtifacts(options).issues, []);
+  });
+}

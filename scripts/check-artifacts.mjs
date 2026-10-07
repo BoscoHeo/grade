@@ -46,6 +46,9 @@ export function checkArtifacts({
           if (/\/\/[#@]\s*sourceMappingURL\s*=|\/\*[#@]\s*sourceMappingURL\s*=/.test(contents)) {
             report(relative, '외부 또는 inline source map 참조');
           }
+          if (/https?:\/\/(?:generativelanguage\.googleapis\.com|api\.openai\.com|api\.groq\.com|api\.x\.ai)\b/i.test(contents)) {
+            report(relative, 'frontend에 AI provider 직접 호출 URL 포함');
+          }
           for (const [label, pattern] of credentialPatterns) {
             if (pattern.test(contents)) report(relative, `${label} 패턴 [REDACTED]`);
           }

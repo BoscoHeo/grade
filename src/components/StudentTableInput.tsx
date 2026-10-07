@@ -259,87 +259,85 @@ export default function StudentTableInput({
     setUploadSuccessMsg("");
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const resultSrc = event.target?.result as string;
-        if (!resultSrc) throw new Error("이미지 파일을 읽을 수 없습니다.");
-        
-        // Extract base64 token
-        const base64Content = resultSrc.split(",")[1];
-        
-        const userApiKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
-        const selectedProvider = (localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai";
-        const selectedModel = localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
-        const userOpenAiKey = localStorage.getItem("USER_OPENAI_API_KEY") || "";
+      const resultSrc = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target?.result as string);
+        reader.onerror = () => reject(new Error("파일 변환에 실패했습니다."));
+        reader.readAsDataURL(file);
+      });
+      if (!resultSrc) throw new Error("이미지 파일을 읽을 수 없습니다.");
 
-        const parsedData = await clientParseTableImage({
-          base64Image: base64Content,
-          mimeType: file.type || "image/png",
-          provider: selectedProvider,
-          model: selectedModel,
-          geminiKey: userApiKey,
-          openaiKey: userOpenAiKey
-        });
-        
-        // Validate parsed structures
-        if (parsedData.students && Array.isArray(parsedData.students)) {
-          // If criteria are present in image, map them
-          if (parsedData.criteria && parsedData.criteria.length > 0) {
-            const tempCriteria: EvaluationCriterion[] = parsedData.criteria.map((c: any, index: number) => ({
-              id: `crit_${Date.now()}_${index}`,
-              domain: c.domain || `영역 ${index + 1}`,
-              achievementStandard: c.achievementStandard || "",
-              evaluationElement: c.evaluationElement || "",
-            }));
-            setCriteria(tempCriteria);
+      // Extract base64 token
+      const base64Content = resultSrc.split(",")[1];
 
-            // Set students mapped with newly parsed criteria ids
-            const tempStudents: Student[] = parsedData.students.map((st: any, sIdx: number) => {
-              const studentGrades: Record<string, string> = {};
-              tempCriteria.forEach((crit, critIdx) => {
-                const parsedGrade = st.grades?.[critIdx]?.gradeValue || "";
-                studentGrades[crit.id] = parsedGrade;
-              });
+      const userApiKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
+      const selectedProvider = (localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai" | "groq" | "xai";
+      const selectedModel = localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
+      const userOpenAiKey = localStorage.getItem("USER_OPENAI_API_KEY") || "";
 
-              return {
-                id: `stud_${Date.now()}_${sIdx}`,
-                number: st.number || `${sIdx + 1}`,
-                name: st.name || `학생 ${sIdx + 1}`,
-                grades: studentGrades,
-              };
+      const parsedData = await clientParseTableImage({
+        base64Image: base64Content,
+        mimeType: file.type || "image/png",
+        provider: selectedProvider,
+        model: selectedModel,
+        geminiKey: userApiKey,
+        openaiKey: userOpenAiKey,
+        groqKey: localStorage.getItem("USER_GROQ_API_KEY") || "",
+        xaiKey: localStorage.getItem("USER_XAI_API_KEY") || ""
+      });
+
+      // Validate parsed structures
+      if (parsedData.students && Array.isArray(parsedData.students)) {
+        // If criteria are present in image, map them
+        if (parsedData.criteria && parsedData.criteria.length > 0) {
+          const tempCriteria: EvaluationCriterion[] = parsedData.criteria.map((c: any, index: number) => ({
+            id: `crit_${Date.now()}_${index}`,
+            domain: c.domain || `영역 ${index + 1}`,
+            achievementStandard: c.achievementStandard || "",
+            evaluationElement: c.evaluationElement || "",
+          }));
+          setCriteria(tempCriteria);
+
+          // Set students mapped with newly parsed criteria ids
+          const tempStudents: Student[] = parsedData.students.map((st: any, sIdx: number) => {
+            const studentGrades: Record<string, string> = {};
+            tempCriteria.forEach((crit, critIdx) => {
+              const parsedGrade = st.grades?.[critIdx]?.gradeValue || "";
+              studentGrades[crit.id] = parsedGrade;
             });
-            setStudents(tempStudents);
-          } else {
-            // Map with existing criteria
-            const tempStudents: Student[] = parsedData.students.map((st: any, sIdx: number) => {
-              const studentGrades: Record<string, string> = {};
-              criteria.forEach((crit, critIdx) => {
-                const parsedGrade = st.grades?.[critIdx]?.gradeValue || "";
-                studentGrades[crit.id] = parsedGrade;
-              });
 
-              return {
-                id: `stud_${Date.now()}_${sIdx}`,
-                number: st.number || `${sIdx + 1}`,
-                name: st.name || `학생 ${sIdx + 1}`,
-                grades: studentGrades,
-              };
-            });
-            setStudents(tempStudents);
-          }
-          
-          setUploadSuccessMsg(`🎉 AI 이미지 일람표가 성공적으로 파싱되었습니다! (${parsedData.students.length}명 로드됨)`);
-          setActiveTab("direct");
+            return {
+              id: `stud_${Date.now()}_${sIdx}`,
+              number: st.number || `${sIdx + 1}`,
+              name: st.name || `학생 ${sIdx + 1}`,
+              grades: studentGrades,
+            };
+          });
+          setStudents(tempStudents);
         } else {
-          throw new Error("이미지에서 올바른 학생 구성을 식별하지 못했습니다.");
+          // Map with existing criteria
+          const tempStudents: Student[] = parsedData.students.map((st: any, sIdx: number) => {
+            const studentGrades: Record<string, string> = {};
+            criteria.forEach((crit, critIdx) => {
+              const parsedGrade = st.grades?.[critIdx]?.gradeValue || "";
+              studentGrades[crit.id] = parsedGrade;
+            });
+
+            return {
+              id: `stud_${Date.now()}_${sIdx}`,
+              number: st.number || `${sIdx + 1}`,
+              name: st.name || `학생 ${sIdx + 1}`,
+              grades: studentGrades,
+            };
+          });
+          setStudents(tempStudents);
         }
-      };
-      
-      reader.onerror = () => {
-        throw new Error("파일 변환에 실패했습니다.");
-      };
-      
-      reader.readAsDataURL(file);
+
+        setUploadSuccessMsg(`🎉 AI 이미지 일람표가 성공적으로 파싱되었습니다! (${parsedData.students.length}명 로드됨)`);
+        setActiveTab("direct");
+      } else {
+        throw new Error("이미지에서 올바른 학생 구성을 식별하지 못했습니다.");
+      }
     } catch (err: any) {
       console.error(err);
       setImageError(err.message || "이미지 파싱 과정 중 오류가 발생했습니다. 수동 입력을 권장합니다.");

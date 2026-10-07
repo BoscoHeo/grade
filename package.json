@@ -12,7 +12,8 @@
     "test:artifacts": "node --test scripts/check-artifacts.test.mjs",
     "start": "node dist/backend/server.cjs",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:ai-routing": "node --test scripts/ai-routing.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

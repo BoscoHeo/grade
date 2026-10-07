@@ -118,7 +118,7 @@ export default function SmartImportCenter({
       }
 
       const userApiKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
-      const selectedProvider = (localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai";
+      const selectedProvider = (localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai" | "groq" | "xai";
       const selectedModel = localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
       const userOpenAiKey = localStorage.getItem("USER_OPENAI_API_KEY") || "";
 
@@ -142,7 +142,9 @@ export default function SmartImportCenter({
         provider: selectedProvider,
         model: selectedModel,
         geminiKey: userApiKey,
-        openaiKey: userOpenAiKey
+        openaiKey: userOpenAiKey,
+        groqKey: localStorage.getItem("USER_GROQ_API_KEY") || "",
+        xaiKey: localStorage.getItem("USER_XAI_API_KEY") || ""
       });
 
       if (parsedData.students && Array.isArray(parsedData.students)) {
