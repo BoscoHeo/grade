@@ -28,6 +28,7 @@ import GuidelineBox from "./components/GuidelineBox";
 import SmartImportCenter from "./components/SmartImportCenter";
 import CreativePlayground from "./components/CreativePlayground";
 import { clientGenerateRecords } from "./services/aiService";
+import { usePageCredentials } from "./contexts/CredentialsContext";
 import { 
   Sparkles, GraduationCap, CheckSquare, Settings2, Play, RefreshCw, AlertCircle, HelpCircle, ArrowRight, ArrowLeft, Upload, Key, KeyRound, Check, Compass
 } from "lucide-react";
@@ -39,10 +40,11 @@ export default function App() {
   const [currentStep, setCurrentStep] = useState<SetupStep>("import");
   const [evaluationMode, setEvaluationMode] = useState<EvaluationMode>(EvaluationMode.SUBJECT);
 
-  // User-override personal Gemini API Key
-  const [userApiKey, setUserApiKey] = useState<string>(() => {
-    return localStorage.getItem("USER_GEMINI_API_KEY") || "";
-  });
+  const { credentials, setCredential } = usePageCredentials();
+
+  // Current-page credentials; never restored from browser storage
+  const userApiKey = credentials.gemini;
+  const setUserApiKey = (value: string) => setCredential("gemini", value);
   const [showKeyPanel, setShowKeyPanel] = useState<boolean>(false);
   const [keySaveFeedback, setKeySaveFeedback] = useState<boolean>(false);
 
@@ -53,19 +55,16 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     return localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
   });
-  const [userOpenAiKey, setUserOpenAiKey] = useState<string>(() => {
-    return localStorage.getItem("USER_OPENAI_API_KEY") || "";
-  });
-  const [userGroqKey, setUserGroqKey] = useState<string>(() => {
-    return localStorage.getItem("USER_GROQ_API_KEY") || "";
-  });
-  const [userXaiKey, setUserXaiKey] = useState<string>(() => {
-    return localStorage.getItem("USER_XAI_API_KEY") || "";
-  });
-  const [userAccessCode, setUserAccessCode] = useState<string>(() => {
-    return localStorage.getItem("USER_ACCESS_CODE") || "";
-  });
+  const userOpenAiKey = credentials.openai;
+  const setUserOpenAiKey = (value: string) => setCredential("openai", value);
+  const userGroqKey = credentials.groq;
+  const setUserGroqKey = (value: string) => setCredential("groq", value);
+  const userXaiKey = credentials.xai;
+  const setUserXaiKey = (value: string) => setCredential("xai", value);
+  const userAccessCode = credentials.accessCode;
+  const setUserAccessCode = (value: string) => setCredential("accessCode", value);
   const [isCustomModel, setIsCustomModel] = useState<boolean>(false);
+  const selectedProviderHasKey = !!credentials[selectedProvider]?.trim();
 
   const handleSaveProvider = (provider: "gemini" | "openai" | "groq" | "xai") => {
     setSelectedProvider(provider);
@@ -214,13 +213,11 @@ export default function App() {
     setStudents(tempStudents);
   };
 
-  // Handler: Save custom keys for all providers
+  // Handler: Apply trimmed values to the current page memory
   const handleSaveApiKey = () => {
-    localStorage.setItem("USER_GEMINI_API_KEY", userApiKey.trim());
-    localStorage.setItem("USER_OPENAI_API_KEY", userOpenAiKey.trim());
-    localStorage.setItem("USER_GROQ_API_KEY", userGroqKey.trim());
-    localStorage.setItem("USER_XAI_API_KEY", userXaiKey.trim());
-    localStorage.setItem("USER_ACCESS_CODE", userAccessCode.trim());
+    for (const field of ["gemini", "openai", "groq", "xai", "accessCode"] as const) {
+      setCredential(field, credentials[field].trim());
+    }
     setKeySaveFeedback(true);
     setTimeout(() => setKeySaveFeedback(false), 2000);
   };
@@ -229,21 +226,16 @@ export default function App() {
   const handleResetApiKey = (pType: "gemini" | "openai" | "groq" | "xai" | "accessCode") => {
     if (pType === "gemini") {
       setUserApiKey("");
-      localStorage.removeItem("USER_GEMINI_API_KEY");
     } else if (pType === "openai") {
       setUserOpenAiKey("");
-      localStorage.removeItem("USER_OPENAI_API_KEY");
     } else if (pType === "groq") {
       setUserGroqKey("");
-      localStorage.removeItem("USER_GROQ_API_KEY");
     } else if (pType === "xai") {
       setUserXaiKey("");
-      localStorage.removeItem("USER_XAI_API_KEY");
     } else {
       setUserAccessCode("");
-      localStorage.removeItem("USER_ACCESS_CODE");
     }
-    alert("정보가 안전하게 지워졌습니다.");
+    alert("현재 페이지의 입력값을 지웠습니다.");
   };
 
   // Handler: Main multi-engine generation controller
@@ -269,7 +261,8 @@ export default function App() {
         geminiKey: userApiKey.trim(),
         openaiKey: userOpenAiKey.trim(),
         groqKey: userGroqKey.trim(),
-        xaiKey: userXaiKey.trim()
+        xaiKey: userXaiKey.trim(),
+        accessCode: userAccessCode.trim()
       });
 
       if (results && Array.isArray(results)) {
@@ -346,17 +339,15 @@ export default function App() {
                 className={`px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer ${
                   showKeyPanel 
                     ? "bg-slate-800 text-white border-slate-800" 
-                    : (selectedProvider === "gemini" && userApiKey) || (selectedProvider === "openai" && userOpenAiKey)
+                    : selectedProviderHasKey
                       ? "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100/50"
                       : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm"
                 }`}
                 title="AI 엔진 및 개인 API Key 입력/변경 설정 패널 열기"
               >
-                <KeyRound className={`w-3.5 h-3.5 ${((selectedProvider === "gemini" && userApiKey) || (selectedProvider === "openai" && userOpenAiKey)) ? "text-emerald-600" : "text-slate-400"}`} />
+                <KeyRound className={`w-3.5 h-3.5 ${selectedProviderHasKey ? "text-emerald-600" : "text-slate-400"}`} />
                 <span>
-                  {selectedProvider === "gemini" 
-                    ? (userApiKey ? "🔑 Gemini 개인키 연동중" : "⚙️ AI 설정 및 API 키")
-                    : (userOpenAiKey ? "🔑 OpenAI 개인키 연동중" : "⚙️ AI 설정 및 API 키")}
+                  {selectedProviderHasKey ? `🔑 ${selectedProvider.toUpperCase()} 개인키 임시 사용 중` : "⚙️ AI 설정 및 API 키"}
                 </span>
               </button>
 
@@ -407,7 +398,7 @@ export default function App() {
                   <h4 className="font-bold text-slate-800 text-sm">인공지능 엔진 및 개별 API Key 세부 설정</h4>
                   <p className="text-slate-500 text-xs mt-0.5 leading-relaxed">
                     구글 Gemini뿐만 아니라 OpenAI 서비스 모델을 자유롭게 연동하여 초고품질의 학교 생활기록부 평어문을 생성할 수 있습니다. 
-                    선택하신 AI 엔진과 입력하신 키는 오직 선생님의 브라우저(LocalStorage) 내부에만 매우 안전하게 즉시 임시 보존됩니다.
+                    엔진·모델 선택은 브라우저에 저장됩니다. API 키와 접속코드는 현재 페이지의 메모리에서만 임시 사용하며, 새로고침하거나 페이지를 닫으면 다시 입력해야 합니다.
                   </p>
                 </div>
               </div>
@@ -453,6 +444,7 @@ export default function App() {
                     <input
                       id="gemini-key-input"
                       type="password"
+                      autoComplete="off"
                       value={userApiKey}
                       onChange={(e) => setUserApiKey(e.target.value)}
                       placeholder="구글 AI Studio 발급 API 키 (AIzaSy...)를 입력하세요 (필수)"
@@ -463,7 +455,7 @@ export default function App() {
                       onClick={handleSaveApiKey}
                       className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                     >
-                      {keySaveFeedback ? "완료" : "등록"}
+                      {keySaveFeedback ? "적용됨" : "임시 적용"}
                     </button>
                     {userApiKey && (
                       <button
@@ -482,10 +474,10 @@ export default function App() {
                     <input
                       id="openai-key-input"
                       type="password"
+                      autoComplete="off"
                       value={userOpenAiKey}
                       onChange={(e) => {
                         setUserOpenAiKey(e.target.value);
-                        localStorage.setItem("USER_OPENAI_API_KEY", e.target.value.trim());
                       }}
                       placeholder="OpenAI API 키 (sk-proj-...)를 입력하세요"
                       className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -495,7 +487,7 @@ export default function App() {
                       onClick={handleSaveApiKey}
                       className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                     >
-                      {keySaveFeedback ? "완료" : "등록"}
+                      {keySaveFeedback ? "적용됨" : "임시 적용"}
                     </button>
                     {userOpenAiKey && (
                       <button
@@ -514,10 +506,10 @@ export default function App() {
                     <input
                       id="groq-key-input"
                       type="password"
+                      autoComplete="off"
                       value={userGroqKey}
                       onChange={(e) => {
                         setUserGroqKey(e.target.value);
-                        localStorage.setItem("USER_GROQ_API_KEY", e.target.value.trim());
                       }}
                       placeholder="Groq API 키 (gsk_...)를 입력하세요"
                       className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -527,7 +519,7 @@ export default function App() {
                       onClick={handleSaveApiKey}
                       className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                     >
-                      {keySaveFeedback ? "완료" : "등록"}
+                      {keySaveFeedback ? "적용됨" : "임시 적용"}
                     </button>
                     {userGroqKey && (
                       <button
@@ -546,10 +538,10 @@ export default function App() {
                     <input
                       id="xai-key-input"
                       type="password"
+                      autoComplete="off"
                       value={userXaiKey}
                       onChange={(e) => {
                         setUserXaiKey(e.target.value);
-                        localStorage.setItem("USER_XAI_API_KEY", e.target.value.trim());
                       }}
                       placeholder="xAI API 키 (xai-...)를 입력하세요"
                       className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -559,7 +551,7 @@ export default function App() {
                       onClick={handleSaveApiKey}
                       className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                     >
-                      {keySaveFeedback ? "완료" : "등록"}
+                      {keySaveFeedback ? "적용됨" : "임시 적용"}
                     </button>
                     {userXaiKey && (
                       <button
@@ -573,7 +565,7 @@ export default function App() {
                   </div>
                 )}
                 <p className="text-[10px] text-slate-400">
-                  * 본 시스템은 보안 및 안정성을 위해 별도의 서버 공용 무료 키를 탑재하고 있지 않습니다. 원활한 평어 작성을 위해 위의 {selectedProvider.toUpperCase()} 개인 API 키를 비밀리에 연동등록하여 활용해 주시기 바랍니다. (입력하신 키는 오직 브라우저 로컬 저장소에만 전적으로 안전 보관됩니다.)
+                  * 본 시스템은 보안 및 안정성을 위해 별도의 서버 공용 무료 키를 탑재하고 있지 않습니다. 원활한 평어 작성을 위해 위의 {selectedProvider.toUpperCase()} 개인 API 키를 비밀리에 연동등록하여 활용해 주시기 바랍니다. API 키와 접속코드는 현재 페이지의 메모리에서만 임시 사용하며 브라우저 저장소에 보관하지 않습니다. 새로고침하거나 페이지를 닫으면 다시 입력해야 합니다.
                 </p>
               </div>
 
@@ -587,10 +579,10 @@ export default function App() {
                   <input
                     id="access-code-input"
                     type="password"
+                    autoComplete="off"
                     value={userAccessCode}
                     onChange={(e) => {
                       setUserAccessCode(e.target.value);
-                      localStorage.setItem("USER_ACCESS_CODE", e.target.value.trim());
                     }}
                     placeholder="지정한 보안 접속코드를 입력하세요 (생략 가능)"
                     className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -600,7 +592,7 @@ export default function App() {
                     onClick={handleSaveApiKey}
                     className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                   >
-                    {keySaveFeedback ? "완료" : "등록"}
+                    {keySaveFeedback ? "적용됨" : "임시 적용"}
                   </button>
                   {userAccessCode && (
                     <button
@@ -716,6 +708,7 @@ export default function App() {
               openaiKey={userOpenAiKey}
               groqKey={userGroqKey}
               xaiKey={userXaiKey}
+              accessCode={userAccessCode}
               onShowKeyPanel={() => setShowKeyPanel(true)}
             />
           </div>
@@ -984,7 +977,7 @@ export default function App() {
                         ) : (
                           <>
                             현재 인공지능 엔진과 연동할 <strong>선생님의 개인 API 키</strong>가 설정되지 않았습니다. 
-                            본 시스템은 서버를 거쳐 안전하게 키를 임시 터널링할 뿐 별도 보존하지 않으며 브라우저에 비밀 보관되므로, 상단 메뉴에서 개인 API 키를 비밀번호처럼 한 번만 등록해 주세요!
+                            개인 API 키와 접속코드는 현재 페이지의 메모리에서만 임시 사용합니다. 새로고침하거나 페이지를 닫으면 다시 입력해야 하며 브라우저 저장소에 영구 보관하지 않습니다.
                           </>
                         )}
                       </p>

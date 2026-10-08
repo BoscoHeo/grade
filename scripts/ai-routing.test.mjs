@@ -19,7 +19,7 @@ const providers = ["gemini", "openai", "groq", "xai"];
 // Synthetic fixtures only; these strings are not credentials or student records.
 const options = {
   model: "fixture-model", geminiKey: "fixture-gemini", openaiKey: "fixture-openai",
-  groqKey: "fixture-groq", xaiKey: "fixture-xai",
+  groqKey: "fixture-groq", xaiKey: "fixture-xai", accessCode: "fixture-access",
   base64Image: "Zml4dHVyZQ==", mimeType: "image/png",
   evaluationMode: "subject", criteria: [{ id: "fixture-criterion" }],
   students: [{ id: "fixture-student" }], config: {},
@@ -44,7 +44,6 @@ for (const provider of providers) {
       const calls = [];
       const service = createAiService(createBackendClient({
         baseUrl: backend + "/", production: true,
-        storage: { getItem: (key) => { assert.equal(key, "USER_ACCESS_CODE"); return "fixture-access"; } },
         fetch: async (url, init) => {
           calls.push({ url: String(url), init });
           return Response.json(route.response);
@@ -78,7 +77,7 @@ for (const provider of providers) {
       test(`${provider}: ${route.endpoint} rejects ${failure.name} with no fallback`, async () => {
         const urls = [];
         const service = createAiService(createBackendClient({
-          baseUrl: backend, production: true, timeoutMs: 25, storage: { getItem: () => "" },
+          baseUrl: backend, production: true, timeoutMs: 25,
           fetch: async (url) => { urls.push(String(url)); return failure.reply(); },
         }));
         await assert.rejects(service[route.method]({ ...options, provider }), (error) => {
@@ -109,7 +108,7 @@ for (const baseUrl of [undefined, "", "relative", "//backend.invalid", "http://b
 }
 
 test("timeout also covers a stalled JSON response body", async () => {
-  const client = createBackendClient({ baseUrl: backend, production: true, timeoutMs: 25, storage: { getItem: () => "" },
+  const client = createBackendClient({ baseUrl: backend, production: true, timeoutMs: 25,
     fetch: async () => ({ ok: true, json: () => new Promise(() => {}) }),
   });
   await assert.rejects(client("/api/generate-records", {}, {}), /시간이 초과/);

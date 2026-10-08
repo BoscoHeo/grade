@@ -10,6 +10,7 @@ interface ProviderOptions {
   openaiKey: string;
   groqKey?: string;
   xaiKey?: string;
+  accessCode?: string;
 }
 
 interface ParseTableImageOptions extends ProviderOptions {
@@ -48,10 +49,13 @@ function providerHeaders(options: ProviderOptions): Record<string, string> {
     xai: options.xaiKey,
   };
   if (!Object.hasOwn(keys, options.provider)) throw new Error("지원하지 않는 AI provider입니다.");
+  const selectedKey = keys[options.provider]?.trim();
+  const accessCode = options.accessCode?.trim();
   return {
     "x-api-provider": options.provider,
     "x-selected-model": options.model,
-    [`x-${options.provider}-api-key`]: keys[options.provider]?.trim() || "",
+    ...(selectedKey ? { [`x-${options.provider}-api-key`]: selectedKey } : {}),
+    ...(accessCode ? { "x-access-code": accessCode } : {}),
   };
 }
 

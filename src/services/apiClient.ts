@@ -4,7 +4,6 @@ interface BackendClientOptions {
   baseUrl?: string;
   production: boolean;
   fetch?: typeof globalThis.fetch;
-  storage?: Pick<Storage, "getItem">;
   timeoutMs?: number;
 }
 
@@ -50,7 +49,6 @@ export function createBackendClient(options: BackendClientOptions): BackendReque
           headers: {
             "Content-Type": "application/json",
             ...headers,
-            "x-access-code": (options.storage ?? globalThis.localStorage)?.getItem("USER_ACCESS_CODE") || "",
           },
           body: JSON.stringify(body),
         });

@@ -81,3 +81,15 @@ for (const host of ['generativelanguage.googleapis.com', 'api.openai.com', 'api.
     assert.deepEqual(checkArtifacts(options).issues, []);
   });
 }
+
+for (const key of ['USER_GEMINI_API_KEY', 'USER_OPENAI_API_KEY', 'USER_GROQ_API_KEY', 'USER_XAI_API_KEY', 'USER_ACCESS_CODE']) {
+  test(`reject credential reads/writes, allow deletion: ${key}`, (t) => {
+    const options = fixture(t);
+    for (const operation of ['getItem', 'setItem']) {
+      fs.writeFileSync(path.join(options.frontendDir, 'assets/app.js'), `localStorage.${operation}("${key}", "fixture")`);
+      assert.equal(checkArtifacts(options).issues.length, 1);
+    }
+    fs.writeFileSync(path.join(options.frontendDir, 'assets/app.js'), `localStorage.removeItem("${key}")`);
+    assert.deepEqual(checkArtifacts(options).issues, []);
+  });
+}

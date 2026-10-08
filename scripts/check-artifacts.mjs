@@ -49,6 +49,9 @@ export function checkArtifacts({
           if (/https?:\/\/(?:generativelanguage\.googleapis\.com|api\.openai\.com|api\.groq\.com|api\.x\.ai)\b/i.test(contents)) {
             report(relative, 'frontend에 AI provider 직접 호출 URL 포함');
           }
+          if (/\b(?:getItem|setItem)\s*\(\s*['"]USER_(?:(?:GEMINI|OPENAI|GROQ|XAI)_API_KEY|ACCESS_CODE)['"]/.test(contents)) {
+            report(relative, 'credential을 브라우저 저장소에서 읽거나 저장하는 코드 포함');
+          }
           for (const [label, pattern] of credentialPatterns) {
             if (pattern.test(contents)) report(relative, `${label} 패턴 [REDACTED]`);
           }

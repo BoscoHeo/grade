@@ -2,6 +2,8 @@ import React, { useState, useRef } from "react";
 import { Upload, FileSpreadsheet, Sparkles, CheckCircle2, AlertCircle, FileText, Play, ArrowRight, Table, HelpCircle, RefreshCw } from "lucide-react";
 import { parsePastedTable } from "../utils";
 import { clientParseTableImage } from "../services/aiService";
+import { usePageCredentials } from "../contexts/CredentialsContext";
+import { credentialRequestOptions } from "../services/credentials";
 import { EvaluationCriterion, Student, EvaluationMode } from "../types";
 
 interface Props {
@@ -23,6 +25,7 @@ export default function SmartImportCenter({
   onLoadSample,
   onShowKeyPanel,
 }: Props) {
+  const { credentials } = usePageCredentials();
   const [activeImportTab, setActiveImportTab] = useState<"ocr" | "excel" | "scratch">("ocr");
   const [pasteText, setPasteText] = useState("");
   const [isParsing, setIsParsing] = useState(false);
@@ -117,10 +120,8 @@ export default function SmartImportCenter({
         throw new Error("파일 콘텐츠가 유효하지 않습니다. 다시 시도해 주십시오.");
       }
 
-      const userApiKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
       const selectedProvider = (localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai" | "groq" | "xai";
       const selectedModel = localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
-      const userOpenAiKey = localStorage.getItem("USER_OPENAI_API_KEY") || "";
 
       // Determine correct mimeType
       let mimeType = file.type;
@@ -141,10 +142,7 @@ export default function SmartImportCenter({
         mimeType: mimeType || "image/png",
         provider: selectedProvider,
         model: selectedModel,
-        geminiKey: userApiKey,
-        openaiKey: userOpenAiKey,
-        groqKey: localStorage.getItem("USER_GROQ_API_KEY") || "",
-        xaiKey: localStorage.getItem("USER_XAI_API_KEY") || ""
+        ...credentialRequestOptions(credentials)
       });
 
       if (parsedData.students && Array.isArray(parsedData.students)) {
@@ -379,7 +377,7 @@ export default function SmartImportCenter({
                 </div>
                 {(errorMsg.includes("QUOTA") || errorMsg.includes("429") || errorMsg.toLowerCase().includes("exhausted") || errorMsg.toLowerCase().includes("limit") || errorMsg.toLowerCase().includes("demand") || errorMsg.toLowerCase().includes("unavailable")) && (
                   (() => {
-                    const hasKey = !!(typeof window !== "undefined" && window.localStorage.getItem("USER_GEMINI_API_KEY")?.trim());
+                    const hasKey = !!credentials[(localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai" | "groq" | "xai"]?.trim();
                     return (
                       <div className="mt-1 p-3 bg-white border border-rose-200 text-rose-950 rounded-lg space-y-1.5">
                         <p className="font-bold text-[11px] flex items-center gap-1.5 text-rose-600">

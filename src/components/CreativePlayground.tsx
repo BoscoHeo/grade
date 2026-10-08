@@ -15,6 +15,7 @@ interface CreativePlaygroundProps {
   openaiKey: string;
   groqKey?: string;
   xaiKey?: string;
+  accessCode?: string;
   onShowKeyPanel: () => void;
 }
 
@@ -263,6 +264,7 @@ export default function CreativePlayground({
   openaiKey,
   groqKey = "",
   xaiKey = "",
+  accessCode = "",
   onShowKeyPanel
 }: CreativePlaygroundProps) {
   // Domain selection (2022 revised lists)
@@ -383,7 +385,8 @@ export default function CreativePlayground({
         geminiKey,
         openaiKey,
         groqKey,
-        xaiKey
+        xaiKey,
+        accessCode
       });
 
       if (elements && elements.length > 0) {
@@ -436,7 +439,8 @@ export default function CreativePlayground({
         geminiKey: geminiKey ? geminiKey.trim() : "",
         openaiKey: openaiKey ? openaiKey.trim() : "",
         groqKey: groqKey ? groqKey.trim() : "",
-        xaiKey: xaiKey ? xaiKey.trim() : ""
+        xaiKey: xaiKey ? xaiKey.trim() : "",
+        accessCode
       });
 
       if (results && Array.isArray(results) && results.length > 0) {

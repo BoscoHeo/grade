@@ -2,6 +2,8 @@ import React, { useState, useRef } from "react";
 import { Student, EvaluationCriterion, EvaluationGrade, MaskingStyle, EvaluationMode } from "../types";
 import { parsePastedTable, maskName } from "../utils";
 import { clientParseTableImage } from "../services/aiService";
+import { usePageCredentials } from "../contexts/CredentialsContext";
+import { credentialRequestOptions } from "../services/credentials";
 import { 
   Users, Trash2, Plus, Copy, RefreshCw, FileSpreadsheet, Upload, Table, Sparkles, CheckCircle2 
 } from "lucide-react";
@@ -195,6 +197,7 @@ export default function StudentTableInput({
   maskingStyle,
   setMaskingStyle
 }: Props) {
+  const { credentials } = usePageCredentials();
   const [activeTab, setActiveTab] = useState<InputTab>("direct");
   const [pasteText, setPasteText] = useState("");
   const [isParsingImage, setIsParsingImage] = useState(false);
@@ -270,20 +273,15 @@ export default function StudentTableInput({
       // Extract base64 token
       const base64Content = resultSrc.split(",")[1];
 
-      const userApiKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
       const selectedProvider = (localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai" | "groq" | "xai";
       const selectedModel = localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
-      const userOpenAiKey = localStorage.getItem("USER_OPENAI_API_KEY") || "";
 
       const parsedData = await clientParseTableImage({
         base64Image: base64Content,
         mimeType: file.type || "image/png",
         provider: selectedProvider,
         model: selectedModel,
-        geminiKey: userApiKey,
-        openaiKey: userOpenAiKey,
-        groqKey: localStorage.getItem("USER_GROQ_API_KEY") || "",
-        xaiKey: localStorage.getItem("USER_XAI_API_KEY") || ""
+        ...credentialRequestOptions(credentials)
       });
 
       // Validate parsed structures
