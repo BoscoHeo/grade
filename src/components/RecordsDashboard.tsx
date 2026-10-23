@@ -8,6 +8,7 @@ import {
 interface Props {
   records: GeneratedRecord[];
   setRecords: React.Dispatch<React.SetStateAction<GeneratedRecord[]>>;
+  onEditSaved?: (studentId: string, text: string) => void;
   config: GenerationConfig;
   maskingStyle: MaskingStyle;
   isGenerating: boolean;
@@ -16,7 +17,8 @@ interface Props {
 
 export default function RecordsDashboard({ 
   records, 
-  setRecords, 
+  setRecords,
+  onEditSaved,
   config, 
   maskingStyle,
   isGenerating,
@@ -36,7 +38,8 @@ export default function RecordsDashboard({
   };
 
   const handleEditSave = (studentId: string) => {
-    setRecords(prev =>
+    if (onEditSaved) onEditSaved(studentId, editingText);
+    else setRecords(prev =>
       prev.map(r => r.studentId === studentId ? { ...r, editedText: editingText } : r)
     );
     setEditingId(null);
@@ -61,7 +64,8 @@ export default function RecordsDashboard({
   const handleCopyAllCombined = () => {
     if (records.length === 0) return;
     
-    const blockText = records.map((r, index) => {
+    const blockText = records.flatMap((r, index) => {
+      if (!(r.editedText || r.recordText).trim()) return [];
       const rawText = r.editedText || r.recordText;
       let nameToUse = r.studentName;
       let finalTxt = rawText;
@@ -91,6 +95,7 @@ export default function RecordsDashboard({
     csvContent += "번호,요약평치,교과학습발달상황(생활기록부평어)\n";
     
     records.forEach((r, index) => {
+      if (!(r.editedText || r.recordText).trim()) return;
       const rawText = r.editedText || r.recordText;
       let nameToUse = r.studentName;
       let finalTxt = rawText;
@@ -318,6 +323,7 @@ export default function RecordsDashboard({
 
                       <button
                         id={`btn-copy-record-${r.studentId}`}
+                        disabled={!currentText.trim()}
                         type="button"
                         onClick={() => handleCopySingle(r, index)}
                         className={`flex items-center gap-1 px-2 py-1 text-[11px] font-bold border rounded-lg transition-all ${
@@ -341,6 +347,9 @@ export default function RecordsDashboard({
                     </div>
                   </div>
 
+                  {r.error && <p role="alert" className="text-xs text-rose-700">
+                    이번 AI 처리 실패: {r.error} {currentText ? "아래 내용은 이전 결과입니다." : "생성된 결과가 없습니다."}
+                  </p>}
                   {/* Comment Content block */}
                   <div className="flex-1">
                     {isUserEditingCurrentRecord ? (

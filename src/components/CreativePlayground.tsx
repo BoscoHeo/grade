@@ -397,8 +397,7 @@ export default function CreativePlayground({
         alert("원하는 구체적 관찰 요소를 자동으로 생성하지 못했습니다. 다시 시도해 주십시오.");
       }
     } catch (error: any) {
-      console.error(error);
-      alert("관찰 요소 생성 도중 오류가 발생했습니다: " + error.message);
+      alert("관찰 요소 생성에 실패했습니다. 연결 상태와 API 설정을 확인한 뒤 다시 시도해 주세요.");
     } finally {
       setIsGeneratingElements(false);
     }
@@ -421,9 +420,6 @@ export default function CreativePlayground({
 
     setIsLoading(true);
     setErrorMessage("");
-    setGroupedResults([]);
-    setActiveGroupIndex(0);
-
     try {
       const results = await clientGenerateCreativeRecommendations({
         domain: activeDomain,
@@ -450,8 +446,7 @@ export default function CreativePlayground({
         throw new Error("올바른 응답 데이터를 받지 못했습니다. 다시 시도해 주세요.");
       }
     } catch (err: any) {
-      console.error(err);
-      setErrorMessage(err.message || "평어 구절 생성 도중 일시적인 네트워크 오류가 생겼습니다. API 키나 서버 리소스를 확인해 주십시오.");
+      setErrorMessage("AI 요청에 실패했습니다. 기존 결과는 유지됩니다. 연결 상태와 API 설정을 확인한 뒤 다시 시도해 주세요.");
     } finally {
       setIsLoading(false);
     }

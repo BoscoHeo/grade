@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 
+import { normalizeRecordResults, hasValidStudentIds } from "./src/services/recordResults";
+
 // Initialize environment variables
 dotenv.config();
 
@@ -92,17 +94,18 @@ function getGenAI(req?: express.Request): GoogleGenAI {
 }
 
 // Helper: Format Server API Error messages for better UX
-function formatServerErrorMessage(error: any): string {
-  const msg = String(error?.message || error || "");
-  if (
-    msg.includes("API key not valid") || 
-    msg.includes("API_KEY_INVALID") || 
-    msg.includes("INVALID_ARGUMENT") ||
-    msg.includes("API key")
-  ) {
-    return "유효하지 않거나 만료된 Gemini API 키가 감지되었습니다. 원활한 평어 분석 및 생성을 위해 화면 우측 상단의 [⚙️ AI 설정 및 API 키] 버튼을 클릭해 올바른 구글 API 키(AIzaSy...)를 등록하거나 프로젝트 Secrets 설정을 확인해주시기 바랍니다!";
-  }
-  return error.message || "오류가 발생했습니다.";
+function formatServerErrorMessage(_error: unknown): string {
+  return "AI 요청을 처리하지 못했습니다. 연결 상태와 API 설정을 확인한 뒤 다시 시도해 주세요.";
+}
+// Deadline includes retries and response-body parsing.
+async function withProviderDeadline<T>(run: (signal: AbortSignal) => Promise<T>, timeoutMs = 60_000): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { reject(new Error("AI_TIMEOUT")); controller.abort(); }, timeoutMs);
+  });
+  try { return await Promise.race([run(controller.signal), timeout]); }
+  finally { clearTimeout(timer!); }
 }
 
 /**
@@ -182,86 +185,23 @@ function sanitizeRecordText(text: string, studentName?: string): string {
   return cleaned.trim();
 }
 
-/**
- * Call Gemini with automatic retry on temporary errors (503, 429, UNAVAILABLE)
- * using exponential backoff, and fallback to alternative models if the primary model is overloaded.
- */
+// Keep two bounded attempts for temporary errors, without cascading models.
 async function generateContentWithRetryAndFallback(
-  ai: GoogleGenAI,
-  params: {
-    model: string;
-    contents: any;
-    config?: any;
-  },
-  maxRetries = 2
+  ai: GoogleGenAI, params: { model: string; contents: any; config?: any }, maxRetries = 2
 ): Promise<GenerateContentResponse> {
-  // Shorter, fast list of fallback models to prevent cascading wait times
-  const modelsToTry = [
-    params.model,
-    "gemini-3.5-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro"
-  ];
-  // Ensure unique models in case params.model is already one of the fallbacks
-  const uniqueModels = Array.from(new Set(modelsToTry));
-
-  let lastError: any = null;
-
-  for (const currentModel of uniqueModels) {
-    let delay = 1000; // initial backoff delay 1 second
+  return withProviderDeadline(async signal => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[Gemini] Attempting ${currentModel} - attempt ${attempt}/${maxRetries}`);
-        const response = await ai.models.generateContent({
-          model: currentModel,
-          contents: params.contents,
-          config: params.config,
-        });
-        console.log(`[Gemini] Success with model ${currentModel}`);
-        return response;
-      } catch (error: any) {
-        lastError = error;
-        const errStr = String(error.message || error);
-        
-        // Quota exceed / Daily limit exhausted / Too many requests
-        const isQuotaExceeded = 
-          errStr.includes("429") || 
-          errStr.toLowerCase().includes("quota") || 
-          errStr.toLowerCase().includes("exhausted") || 
-          errStr.toLowerCase().includes("limit");
-
-        if (isQuotaExceeded) {
-          console.warn(`[Gemini Error] Quota exceeded on ${currentModel}. Breaking to try next fallback model: ${errStr}`);
-          // Break the attempt loop to try the fallback model immediately
-          break;
+      if (signal.aborted) throw new Error("AI_TIMEOUT");
+      try { return await ai.models.generateContent({ ...params, config: { ...params.config, abortSignal: signal } }); }
+      catch (error: any) {
+        if (signal.aborted || attempt === maxRetries || ![429, 500, 502, 503, 504].includes(Number(error?.status))) {
+          throw new Error("AI_PROVIDER_FAILED");
         }
-
-        const isTemporary = 
-          errStr.includes("503") || 
-          errStr.includes("UNAVAILABLE") || 
-          errStr.includes("high demand") || 
-          errStr.includes("overloaded") ||
-          errStr.includes("temp") ||
-          (error.status && (error.status === 503 || error.status === "UNAVAILABLE"));
-
-        if (isTemporary) {
-          console.warn(
-            `[Gemini Warning] Temporary error on ${currentModel} (attempt ${attempt}): ${errStr}. Retrying in ${delay}ms...`
-          );
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 2; // exponential backoff
-        } else {
-          console.error(`[Gemini Error] Non-retriable error on ${currentModel}: ${errStr}`);
-          // Break the attempt loop to try the fallback model immediately
-          break;
-        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
-  }
-
-  throw lastError || new Error("All Gemini generation attempts and fallback models failed.");
+    throw new Error("AI_PROVIDER_FAILED");
+  });
 }
 
 /**
@@ -295,26 +235,14 @@ async function generateContentWithOpenAI(
     bodyData["response_format"] = { type: "json_object" };
   }
 
-  console.log(`[OPENAI] Requesting model ${model} at ${url}`);
-  
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(bodyData)
+  return withProviderDeadline(async signal => {
+    const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(bodyData), signal });
+    if (!response.ok) throw new Error("AI_PROVIDER_FAILED");
+    const payload = await response.json();
+    const text = payload?.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || !text.trim()) throw new Error("AI_EMPTY_RESPONSE");
+    return text;
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[OPENAI Error]`, errorText);
-    throw new Error(`OpenAI API returned error status ${response.status}: ${errorText}`);
-  }
-
-  const payload = await response.json();
-  if (payload.choices && payload.choices[0] && payload.choices[0].message) {
-    return payload.choices[0].message.content || "";
-  } else {
-    throw new Error(`Invalid response format from OpenAI: ${JSON.stringify(payload)}`);
-  }
 }
 
 // REST API Endpoints
@@ -476,9 +404,10 @@ app.post("/api/parse-table-image", async (req, res) => {
       parsedJsonText = response.text || "{}";
     }
 
-    res.json(JSON.parse(parsedJsonText));
+    const parsed = JSON.parse(parsedJsonText);
+    if (!parsed || !Array.isArray(parsed.students) || !parsed.students.length) throw new Error("AI_EMPTY_RESPONSE");
+    res.json(parsed);
   } catch (error: any) {
-    console.error("Error parsing table document:", error);
     res.status(500).json({ error: formatServerErrorMessage(error) });
   }
 });
@@ -490,6 +419,9 @@ app.post("/api/generate-records", async (req, res) => {
 
     if (!students || !Array.isArray(students) || students.length === 0) {
       return res.status(400).json({ error: "No student roster provided." });
+    }
+    if (!hasValidStudentIds(students)) {
+      return res.status(400).json({ error: "학생 ID가 누락되었거나 중복되었습니다." });
     }
     if (!criteria || !Array.isArray(criteria)) {
       return res.status(400).json({ error: "No evaluation criteria provided." });
@@ -520,8 +452,6 @@ app.post("/api/generate-records", async (req, res) => {
 
     const provider = (req.headers["x-api-provider"] as string) || "gemini";
     const selectedModel = (req.headers["x-selected-model"] as string) || "gemini-3.1-flash-lite";
-
-    const ai = provider === "gemini" ? getGenAI(req) : null;
 
     // To make sure each student gets a unique, tailored, high-quality development statement,
     // we instruct Gemini. Generating in batched chunks of 5-8 students per call helps keep
@@ -620,7 +550,7 @@ app.post("/api/generate-records", async (req, res) => {
 ${focusInstructions.join("\n")}
 ${additionalInstructions ? `4. 선생님 의뢰 추가 요건:\n${additionalInstructions}` : ""}`;
 
-    const chunkPromises = studentChunks.map(async (chunk, chunkIdx) => {
+    const chunkPromises = studentChunks.map(async (chunk) => {
       const chunkPromptUser = `아래 명단에 수록된 초등학교/중학교 학생들의 실제 평가 데이터를 분석하고 기재 지침을 완벽히 이행하여 맞춤형 특기사항/평어 문구를 작성해 주세요.
 
 [평가 데이터 학생 명단]
@@ -728,31 +658,17 @@ ${chunk.map((st, i) => `${i + 1}. 이칭번호: ${st.id}, 이름: ${st.name}, �
           chunkResults = JSON.parse(cleanText);
         }
 
-        return chunkResults.map((item: any) => ({
-          studentId: item.studentId || "",
-          studentName: item.studentName || "",
-          studentNumber: item.studentNumber || "",
-          gradesSummary: item.gradesSummary || "",
-          recordText: sanitizeRecordText(item.recordText || item.text || item.recommendedText || "")
-        }));
-      } catch (err: any) {
-        console.error(`Error in chunk ${chunkIdx}:`, err);
-        return chunk.map(st => ({
-          studentId: st.id,
-          studentName: st.name,
-          studentNumber: st.number || "",
-          gradesSummary: "",
-          recordText: `${subject} 과목 평가 요소를 전반적으로 성실히 수행하였으며, 세부 학습 내용 중심 피드백 수행을 적극 실천함.`
-        }));
+        return normalizeRecordResults(chunk, chunkResults, sanitizeRecordText);
+      } catch {
+        return normalizeRecordResults(chunk, []);
       }
     });
 
     const chunkResultsArray = await Promise.all(chunkPromises);
-    const parsedResults = chunkResultsArray.flat();
+    const parsedResults = chunkResultsArray.flat().map(({ isGenerating, ...result }) => result);
 
     res.json({ results: parsedResults });
   } catch (error: any) {
-    console.error("Error generating records:", error);
     res.status(500).json({ error: formatServerErrorMessage(error) });
   }
 });
@@ -1009,13 +925,12 @@ ${selectedElementsList.map((el, idx) => `${idx + 1}. ${el}`).join("\n")}
       }];
     }
 
-    if (results.length === 0 || results[0].items.length === 0) {
+    if (results.length === 0 || results.some(group => !group.items.length || group.items.some((item: any) => !item.recommendedText.trim()))) {
       throw new Error("AI 엔진이 올바른 추천 문구를 1개 이상 생성하는 데 실패했습니다. 원격 AI 안전 필터가 발동했거나 사용된 API 키의 할당량 한도 초과, 혹은 키 불일치 상태일 수 있습니다.");
     }
 
     res.json({ results });
   } catch (error: any) {
-    console.error("Error generating creative recommendations:", error);
     res.status(500).json({ error: formatServerErrorMessage(error) });
   }
 });
@@ -1149,9 +1064,9 @@ app.post("/api/generate-creative-elements", async (req, res) => {
     const data = JSON.parse(cleanText);
     const elements = Array.isArray(data.elements) ? data.elements : [];
 
+    if (!elements.length || elements.some((element: unknown) => typeof element !== "string" || !element.trim())) throw new Error("AI_EMPTY_RESPONSE");
     res.json({ elements });
   } catch (error: any) {
-    console.error("Error generating creative elements:", error);
     res.status(500).json({ error: formatServerErrorMessage(error) });
   }
 });
@@ -1179,4 +1094,5 @@ async function startServer() {
   });
 }
 
-startServer();
+export { app };
+if (process.env.NODE_ENV !== "test") startServer();

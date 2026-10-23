@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import { createRecordGenerationController } from "./services/recordGeneration";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   SAMPLE_CRITERIA, 
   SAMPLE_STUDENTS,
@@ -120,9 +121,24 @@ export default function App() {
   const [maskingStyle, setMaskingStyle] = useState<MaskingStyle>(MaskingStyle.NONE);
 
   // Output generated lists
+  const studentsRef = useRef(students);
+  studentsRef.current = students;
+  useEffect(() => {
+    const ids = new Set(students.map(student => student.id));
+    setRecords(previous => previous.filter(record => ids.has(record.studentId)));
+  }, [students]);
   const [records, setRecords] = useState<GeneratedRecord[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [networkError, setNetworkError] = useState("");
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
+  const editVersions = useRef(new Map<string, number>());
+  const generation = useRef(createRecordGenerationController());
+  const handleRecordEditSaved = (studentId: string, text: string) => {
+    editVersions.current.set(studentId, (editVersions.current.get(studentId) ?? 0) + 1);
+    setRecords(previous => previous.map(record => record.studentId === studentId ? { ...record, editedText: text } : record));
+  };
+
 
   const handleSwitchMode = (mode: EvaluationMode) => {
     setEvaluationMode(mode);
@@ -246,44 +262,19 @@ export default function App() {
       return;
     }
 
-    setIsGenerating(true);
-    setNetworkError("");
-    setCurrentStep("results"); // transition view to results dashboard to show progress
-
-    try {
-      const results = await clientGenerateRecords({
-        evaluationMode,
-        criteria,
-        students,
-        config,
-        provider: selectedProvider,
-        model: selectedModel,
-        geminiKey: userApiKey.trim(),
-        openaiKey: userOpenAiKey.trim(),
-        groqKey: userGroqKey.trim(),
-        xaiKey: userXaiKey.trim(),
-        accessCode: userAccessCode.trim()
-      });
-
-      if (results && Array.isArray(results)) {
-        const mappedRecords: GeneratedRecord[] = results.map((r: any) => ({
-          studentId: r.studentId,
-          studentName: r.studentName,
-          studentNumber: r.studentNumber,
-          gradesSummary: r.gradesSummary || "영역 세부 등급 요약",
-          recordText: r.recordText,
-          isGenerating: false,
-        }));
-        setRecords(mappedRecords);
-      } else {
-        throw new Error("올바른 완성 성향 레코드를 받지 못했습니다. 목록 구성을 점검해 주세요.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setNetworkError(err.message || "오류가 발생해 평어를 생성할 수 없습니다. API 연결과 키가 유효한지 상단 설정 패널을 확인해보세요.");
-    } finally {
-      setIsGenerating(false);
-    }
+    await generation.current({
+      getState: () => ({ students: studentsRef.current, records: recordsRef.current, editVersions: editVersions.current }),
+      confirm: message => window.confirm(message),
+      apply: setRecords,
+      pending: value => { setIsGenerating(value); if (value) setCurrentStep("results"); },
+      outcome: setNetworkError,
+      request: requestStudents => clientGenerateRecords({
+        evaluationMode, criteria, students: requestStudents, config,
+        provider: selectedProvider, model: selectedModel,
+        geminiKey: userApiKey.trim(), openaiKey: userOpenAiKey.trim(),
+        groqKey: userGroqKey.trim(), xaiKey: userXaiKey.trim(), accessCode: userAccessCode.trim(),
+      }),
+    });
   };
 
   const stepsList = [
@@ -1020,8 +1011,9 @@ export default function App() {
               )}
 
               <RecordsDashboard 
-                records={records}
+                records={records.filter(record => students.some(student => student.id === record.studentId))}
                 setRecords={setRecords}
+                onEditSaved={handleRecordEditSaved}
                 config={config}
                 maskingStyle={maskingStyle}
                 isGenerating={isGenerating}

@@ -58,6 +58,8 @@ export function createBackendClient(options: BackendClientOptions): BackendReque
       if (!response.ok) {
         const detail = response.status === 401 || response.status === 403
           ? "접근 코드와 서버 접근 권한을 확인해 주세요."
+          : response.status === 429 ? "요청이 많습니다. 잠시 후 다시 시도해 주세요."
+          : response.status >= 500 ? "AI 서버 처리에 실패했습니다. 잠시 후 다시 시도해 주세요."
           : "서버 설정 또는 AI 요청 처리 상태를 확인해 주세요.";
         throw new Error(`Backend 요청 실패 (HTTP ${response.status}). ${detail}`);
       }
