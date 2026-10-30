@@ -1,22 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { 
-  clientGenerateCreativeRecommendations,
-  clientGenerateCreativeElements
-} from "../services/aiService";
+import { AI_SUSPENDED_MESSAGE } from "../services/aiSuspension";
 import { 
   Sparkles, Compass, Check, Copy, Edit2, CheckCircle2, RotateCcw, AlertTriangle, HelpCircle, 
   Settings2, BookOpen, User, Info, FileText, Download, Plus, Trash2
 } from "lucide-react";
 
-interface CreativePlaygroundProps {
-  provider: "gemini" | "openai" | "groq" | "xai";
-  model: string;
-  geminiKey: string;
-  openaiKey: string;
-  groqKey?: string;
-  xaiKey?: string;
-  onShowKeyPanel: () => void;
-}
+
 
 interface ActivityPreset {
   topic: string;
@@ -256,15 +245,7 @@ function processSentenceCleanup(rawText: string, replaceName?: string): string {
   return text.trim();
 }
 
-export default function CreativePlayground({
-  provider,
-  model,
-  geminiKey,
-  openaiKey,
-  groqKey = "",
-  xaiKey = "",
-  onShowKeyPanel
-}: CreativePlaygroundProps) {
+export default function CreativePlayground() {
   // Domain selection (2022 revised lists)
   const [activeDomain, setActiveDomain] = useState<string>("자율활동");
   
@@ -367,91 +348,8 @@ export default function CreativePlayground({
     setSelectedElements([]);
   };
 
-  const handleGenerateElements = async () => {
-    if (!customTopic.trim()) {
-      alert("먼저 대표 실천 주제 및 활동명을 직접 입력해 주십시오.");
-      return;
-    }
-
-    setIsGeneratingElements(true);
-    try {
-      const elements = await clientGenerateCreativeElements({
-        domain: activeDomain,
-        topic: customTopic.trim(),
-        provider,
-        model,
-        geminiKey,
-        openaiKey,
-        groqKey,
-        xaiKey
-      });
-
-      if (elements && elements.length > 0) {
-        setAiGeneratedElements(elements);
-        setSelectedElements(elements);
-        setIsCustomElementUsed(false); // Switch to checkboxes list to make sure they see them
-      } else {
-        alert("원하는 구체적 관찰 요소를 자동으로 생성하지 못했습니다. 다시 시도해 주십시오.");
-      }
-    } catch (error: any) {
-      console.error(error);
-      alert("관찰 요소 생성 도중 오류가 발생했습니다: " + error.message);
-    } finally {
-      setIsGeneratingElements(false);
-    }
-  };
-
-  const handleGenerate = async () => {
-    if (!activeTopicValue.trim()) {
-      alert("대표 실천 주제 및 활동명을 입력하거나 선택해 주십시오.");
-      return;
-    }
-
-    const finalElementsToProcess = isCustomElementUsed 
-      ? (customElement.trim() ? [customElement.trim()] : [])
-      : selectedElements;
-
-    if (finalElementsToProcess.length === 0) {
-      alert("구체적 관찰 요소를 1개 이상 입력하거나 선택해 주십시오.");
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage("");
-    setGroupedResults([]);
-    setActiveGroupIndex(0);
-
-    try {
-      const results = await clientGenerateCreativeRecommendations({
-        domain: activeDomain,
-        topic: activeTopicValue,
-        element: finalElementsToProcess[0], // fallback singular
-        elements: finalElementsToProcess,    // plural list
-        tone,
-        maxLength,
-        creativityLevel,
-        additionalInstructions,
-        provider,
-        model,
-        geminiKey: geminiKey ? geminiKey.trim() : "",
-        openaiKey: openaiKey ? openaiKey.trim() : "",
-        groqKey: groqKey ? groqKey.trim() : "",
-        xaiKey: xaiKey ? xaiKey.trim() : ""
-      });
-
-      if (results && Array.isArray(results) && results.length > 0) {
-        setGroupedResults(results);
-        setActiveGroupIndex(0);
-      } else {
-        throw new Error("올바른 응답 데이터를 받지 못했습니다. 다시 시도해 주세요.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setErrorMessage(err.message || "평어 구절 생성 도중 일시적인 네트워크 오류가 생겼습니다. API 키나 서버 리소스를 확인해 주십시오.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const handleGenerateElements = () => { alert(AI_SUSPENDED_MESSAGE); };
+  const handleGenerate = () => { alert(AI_SUSPENDED_MESSAGE); };
 
   // Safe handler to copy sentence
   const handleCopy = (id: number, text: string) => {
@@ -626,12 +524,6 @@ export default function CreativePlayground({
     link.click();
     document.body.removeChild(link);
   };
-
-  const hasApiKey = 
-    (provider === "gemini" && geminiKey) || 
-    (provider === "openai" && openaiKey) ||
-    (provider === "groq" && groqKey) ||
-    (provider === "xai" && xaiKey);
 
   return (
     <div id="creative-playground-container" className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -939,24 +831,7 @@ export default function CreativePlayground({
 
           {/* Generation Trigger Area */}
           <div className="pt-3 border-t border-slate-100">
-            {!hasApiKey && (
-              <div className="p-3 bg-amber-50 border border-amber-100/60 rounded-xl text-amber-800 text-[11px] mb-3 leading-relaxed flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong>개인 관찰 API 연동 안내:</strong> 
-                  <span className="ml-1">
-                    우측 상단 [⚙️ AI 설정 및 API 키] 메뉴에 키를 추가하시면 원외 우수 속도로 직접 집필합니다. 미등록 상태에서는 로컬 기본 템플릿 명문이 지급됩니다.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onShowKeyPanel}
-                    className="ml-1.5 text-indigo-600 font-extrabold underline hover:text-indigo-805 inline-block"
-                  >
-                    키 입력창 열기
-                  </button>
-                </div>
-              </div>
-            )}
+            <p role="status" className="p-3 bg-amber-50 text-sm">{AI_SUSPENDED_MESSAGE}</p>
 
             <button
               id="btn-creative-recommend-generate"

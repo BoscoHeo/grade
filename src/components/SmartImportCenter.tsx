@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Upload, FileSpreadsheet, Sparkles, CheckCircle2, AlertCircle, FileText, Play, ArrowRight, Table, HelpCircle, RefreshCw } from "lucide-react";
 import { parsePastedTable } from "../utils";
-import { clientParseTableImage } from "../services/aiService";
+import { AI_SUSPENDED_MESSAGE } from "../services/aiSuspension";
 import { EvaluationCriterion, Student, EvaluationMode } from "../types";
 
 interface Props {
@@ -77,132 +77,13 @@ export default function SmartImportCenter({
     }
   };
 
-  const triggerFileBrowser = () => {
-    fileInputRef.current?.click();
-  };
-
-  const readAsDataURLAsync = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          resolve(e.target.result as string);
-        } else {
-          reject(new Error("업로드된 파일을 기입하는 과정에 장애가 발생했습니다."));
-        }
-      };
-      reader.onerror = () => reject(new Error("파일 변동 로드에 지장이 생겼습니다."));
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Send request for AI scans with image or PDF
-  const processDocumentFile = async (file: File) => {
-    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    const isImage = file.type.startsWith("image/") || file.name.toLowerCase().match(/\.(png|jpe?g|webp|gif)$/);
-
-    if (!isPDF && !isImage) {
-      setErrorMsg("성적 결과로 인정되는 PDF 파일이나 이미지 파일(PNG, JPG, WebP)만 업로드할 수 있습니다.");
-      return;
-    }
-
-    setIsParsing(true);
-    setErrorMsg("");
-    setSuccessMsg("");
-
-    try {
-      const resultSrc = await readAsDataURLAsync(file);
-      const base64Content = resultSrc.split(",")[1];
-      if (!base64Content) {
-        throw new Error("파일 콘텐츠가 유효하지 않습니다. 다시 시도해 주십시오.");
-      }
-
-      const userApiKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
-      const selectedProvider = (localStorage.getItem("USER_SELECTED_PROVIDER") || "gemini") as "gemini" | "openai";
-      const selectedModel = localStorage.getItem("USER_SELECTED_MODEL") || "gemini-3.1-flash-lite";
-      const userOpenAiKey = localStorage.getItem("USER_OPENAI_API_KEY") || "";
-
-      // Determine correct mimeType
-      let mimeType = file.type;
-      if (!mimeType) {
-        if (isPDF) {
-          mimeType = "application/pdf";
-        } else if (file.name.toLowerCase().endsWith(".png")) {
-          mimeType = "image/png";
-        } else if (file.name.toLowerCase().endsWith(".webp")) {
-          mimeType = "image/webp";
-        } else {
-          mimeType = "image/jpeg";
-        }
-      }
-
-      const parsedData = await clientParseTableImage({
-        base64Image: base64Content,
-        mimeType: mimeType || "image/png",
-        provider: selectedProvider,
-        model: selectedModel,
-        geminiKey: userApiKey,
-        openaiKey: userOpenAiKey
-      });
-
-      if (parsedData.students && Array.isArray(parsedData.students)) {
-        // 1. Setup Criteria from PDF if present
-        let tempCriteria: EvaluationCriterion[] = [];
-        if (parsedData.criteria && parsedData.criteria.length > 0) {
-          tempCriteria = parsedData.criteria.map((c: any, index: number) => ({
-            id: `crit_${Date.now()}_${index}`,
-            domain: c.domain || `평가 영역 ${index + 1}`,
-            achievementStandard: c.achievementStandard || "",
-            evaluationElement: c.evaluationElement || "세부 성취수준",
-          }));
-          setCriteria(tempCriteria);
-        } else {
-          // fallback criterion
-          tempCriteria = [
-            {
-              id: `crit_${Date.now()}_0`,
-              domain: "교과 성취기준 및 발달도",
-              achievementStandard: "",
-              evaluationElement: "세부 성취 수준",
-            }
-          ];
-          setCriteria(tempCriteria);
-        }
-
-        // 2. Setup Students matched to parsed criteria
-        const tempStudents: Student[] = parsedData.students.map((st: any, sIdx: number) => {
-          const studentGrades: Record<string, string> = {};
-          tempCriteria.forEach((crit, critIdx) => {
-            const parsedGradeVal = st.grades?.[critIdx]?.gradeValue || "";
-            studentGrades[crit.id] = parsedGradeVal;
-          });
-
-          return {
-            id: `stud_${Date.now()}_${sIdx}`,
-            number: st.number || `${sIdx + 1}`,
-            name: st.name || `학생 ${sIdx + 1}`,
-            grades: studentGrades,
-          };
-        });
-
-        setStudents(tempStudents);
-        setSuccessMsg(`🎉 AI 기기 인식이 성공했습니다! [${file.name}] 문서 분석을 통해 학생 ${tempStudents.length}명의 과목 성적표가 완벽 정량 입력되었습니다.`);
-        
-        alert(`📚 AI 문서 스캔 성공!\n${tempStudents.length}명의 성적 등급 자료가 연계되었습니다. "학생 명단 편집" 단계로 진입합니다.`);
-        onAdvanceToStep("students"); // Immediately shift to check grid
-      } else {
-        throw new Error("안내: 문서 안에서 명목 등급 및 학생 묶음을 인식하지 못했습니다. 형식을 검토하거나 엑셀 붙여넣기를 활용해 주세요.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || "파일 데이터 전환에 지체를 빚었습니다. 다시 시도해 주십시오.");
-    } finally {
-      setIsParsing(false);
-    }
-  };
+  const triggerFileBrowser = () => { setErrorMsg(AI_SUSPENDED_MESSAGE); };
+  // Refuse before reading or encoding documents; pasted tables remain local.
+  const processDocumentFile = (_file: File) => { setErrorMsg(AI_SUSPENDED_MESSAGE); };
 
   return (
     <div className="space-y-6">
+      <p role="status" className="p-3 bg-amber-50 text-sm">{AI_SUSPENDED_MESSAGE}</p>
       
       {/* Intro Greetings Banner */}
       <div id="smart-import-welcome-header" className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-6 md:p-8 shadow-md">
@@ -375,49 +256,6 @@ export default function SmartImportCenter({
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{errorMsg}</span>
                 </div>
-                {(errorMsg.includes("QUOTA") || errorMsg.includes("429") || errorMsg.toLowerCase().includes("exhausted") || errorMsg.toLowerCase().includes("limit") || errorMsg.toLowerCase().includes("demand") || errorMsg.toLowerCase().includes("unavailable")) && (
-                  (() => {
-                    const hasKey = !!(typeof window !== "undefined" && window.localStorage.getItem("USER_GEMINI_API_KEY")?.trim());
-                    return (
-                      <div className="mt-1 p-3 bg-white border border-rose-200 text-rose-950 rounded-lg space-y-1.5">
-                        <p className="font-bold text-[11px] flex items-center gap-1.5 text-rose-600">
-                          <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
-                          <span>
-                            {hasKey 
-                              ? "💡 해결 방법: 개인 API 키 일시 요율 한도(Rate Limit) 도달 또는 서버 지연" 
-                              : "💡 해결 방법: 개인 API 키(Secret Key)가 지정되지 않음"
-                            }
-                          </span>
-                        </p>
-                        <p className="text-[10px] leading-relaxed text-slate-500">
-                          {hasKey ? (
-                            <>
-                              현재 등록하신 <strong>개인 전용 API 키</strong>가 발급 무료 티어의 <strong>분당 요청(RPM) 한도</strong>를 일시적으로 초과했거나, 구글/OpenAI 서버 트래픽이 심하게 정체되었습니다. 
-                              수초 혹은 1~2분 정도 뒤에 [즉시 재시도] 버튼을 클릭해 주십시오. 
-                            </>
-                          ) : (
-                            <>
-                              원격 인공지능 분석 가동을 위해서는 개인 API 키를 등록하셔야 합니다. 
-                              우측 상단의 <strong>[⚙️ AI 설정 및 API 키]</strong> 메뉴에 선생님 전용 API 키를 비밀리에 입력/등록해 주시면 즉시 안전하고 쾌적하게 정상 작동합니다.
-                            </>
-                          )}
-                        </p>
-                        {!hasKey && onShowKeyPanel && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onShowKeyPanel();
-                              window.scrollTo({ top: 0, behavior: "smooth" });
-                            }}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center"
-                          >
-                            🔑 개인 API 키 등록 패널 열기
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()
-                )}
               </div>
             )}
 
